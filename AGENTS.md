@@ -4,15 +4,15 @@ TypeScript CLI codemod. No React, no JSX. Bun for running and testing, `tsc` for
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `bun run check` | Everything below, in order. Run this before calling work done. |
-| `bun run format` | `oxfmt --write .` — rewrites files. |
-| `bun run format:check` | Fails if anything is unformatted. |
-| `bun run lint` | `oxlint` — type-aware rules included (`options.typeAware` in `.oxlintrc.json`), so this needs `oxlint-tsgolint` installed. |
-| `bun run lint:fix` | Applies only the fixes oxlint considers safe. Re-run `lint` after; most findings are not auto-fixable. |
-| `bun run types:check` | `tsc --noEmit`. |
-| `bun test` | Bun test runner. |
+| Command                | What it does                                                                                                               |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `bun run check`        | Everything below, in order. Run this before calling work done.                                                             |
+| `bun run format`       | `oxfmt --write .` — rewrites files.                                                                                        |
+| `bun run format:check` | Fails if anything is unformatted.                                                                                          |
+| `bun run lint`         | `oxlint` — type-aware rules included (`options.typeAware` in `.oxlintrc.json`), so this needs `oxlint-tsgolint` installed. |
+| `bun run lint:fix`     | Applies only the fixes oxlint considers safe. Re-run `lint` after; most findings are not auto-fixable.                     |
+| `bun run types:check`  | `tsc --noEmit`.                                                                                                            |
+| `bun test`             | Bun test runner.                                                                                                           |
 
 Type-aware linting is switched on in `.oxlintrc.json` itself, not by a flag, so the CLI and the
 editor see the same errors. Do not turn `options.typeAware` off to make a run faster — it is what

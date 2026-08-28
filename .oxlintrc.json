@@ -80,7 +80,10 @@
     "max-params": ["error", 4],
     "max-nested-callbacks": ["error", 3],
     "max-lines": ["error", { "max": 400, "skipBlankLines": true, "skipComments": true }],
-    "max-lines-per-function": ["error", { "max": 120, "skipBlankLines": true, "skipComments": true }],
+    "max-lines-per-function": [
+      "error",
+      { "max": 120, "skipBlankLines": true, "skipComments": true }
+    ],
 
     "typescript/no-explicit-any": "error",
     "typescript/no-non-null-assertion": "error",
@@ -100,7 +103,10 @@
     "typescript/prefer-namespace-keyword": "error",
     "typescript/array-type": ["error", { "default": "array-simple" }],
     "typescript/consistent-type-definitions": ["error", "type"],
-    "typescript/consistent-type-imports": ["error", { "disallowTypeAnnotations": false, "fixStyle": "separate-type-imports" }],
+    "typescript/consistent-type-imports": [
+      "error",
+      { "disallowTypeAnnotations": false, "fixStyle": "separate-type-imports" }
+    ],
     "typescript/dot-notation": "error",
     "typescript/no-unused-vars": ["error", { "fix": { "imports": "safe-fix" } }],
     "typescript/explicit-function-return-type": [
@@ -209,7 +215,10 @@
     {
       "files": ["src/cli.ts"],
       "rules": {
-        "max-lines-per-function": ["error", { "max": 200, "skipBlankLines": true, "skipComments": true }]
+        "max-lines-per-function": [
+          "error",
+          { "max": 200, "skipBlankLines": true, "skipComments": true }
+        ]
       }
     }
   ]
