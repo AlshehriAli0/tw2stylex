@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import { applyFile, dirtyFiles, type ApplyFileResult } from "./apply.ts";
+import { applyScanned, dirtyFiles, readAndScan, type ApplyFileResult } from "./apply.ts";
 import {
   flagWithoutValue,
   flagNumber,
@@ -12,7 +12,8 @@ import {
   type Args,
 } from "./args.ts";
 import { isRecord } from "./cjs.ts";
-import { convert } from "./convert.ts";
+import { convert, warmUp } from "./convert.ts";
+import { printCreate } from "./css-to-stylex.ts";
 import { EXIT, fail, type Failure } from "./fail.ts";
 import { collectFiles, findEntryCss } from "./find-files.ts";
 import { AGENT_HOMES, homesPresent, installSkill } from "./init.ts";
@@ -122,6 +123,7 @@ export const explainCommand = async (args: Args, out: Output): Promise<CommandRe
   const sys = await loadDesignSystem(css);
   const result = convert(sys.ds, "styles", classes);
   const skips = result.skips.map(s => toSkipLine("<argv>", 0, 0, s));
+  const source = result.style ? printCreate({ styles: result.style }) : undefined;
 
   if (out.json) {
     emit({
@@ -129,11 +131,11 @@ export const explainCommand = async (args: Args, out: Output): Promise<CommandRe
       entry: sys.entry,
       tailwind: sys.version,
       stylex: result.style,
-      source: result.source,
+      source,
       skipped: skips,
     });
   } else {
-    if (result.source !== undefined) console.log(result.source);
+    if (source !== undefined) console.log(source);
     for (const skip of skips)
       console.log(
         `skipped ${skip.reason}${skip.class === undefined ? "" : ` "${skip.class}"`}: ${skip.detail}\n  fix: ${skip.hint}`,
@@ -248,7 +250,12 @@ export const applyCommand = async (args: Args, out: Output): Promise<CommandResu
   if (typeof css !== "string") return css;
 
   const sys = await loadDesignSystem(css);
-  const results = collectFiles(target).map(f => applyFile(sys, f, write));
+  const scanned = collectFiles(target).map(readAndScan);
+  warmUp(
+    sys.ds,
+    scanned.flatMap(s => s.scan.usages.map(u => u.classNames)),
+  );
+  const results = scanned.map(s => applyScanned(sys, s, write));
   const touched = results.filter(r => r.rewritten > 0);
   const rewritten = touched.reduce((a, r) => a + r.rewritten, 0);
   const skipped = results.reduce((a, r) => a + r.skipped, 0);

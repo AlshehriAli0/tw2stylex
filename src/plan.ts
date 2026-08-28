@@ -1,10 +1,10 @@
 import fs from "node:fs";
 
-import { convert } from "./convert.ts";
+import { convert, warmUp } from "./convert.ts";
 import { printCreate, type Style } from "./css-to-stylex.ts";
 import { toSkipLine, type FileResult, type Report } from "./report.ts";
-import { scanFile } from "./scan-file.ts";
-import { styleNameFor, styleObjectName } from "./style-name.ts";
+import { scanFile, type ScanResult } from "./scan-file.ts";
+import { nameIsTaken, styleNameFor, styleObjectName } from "./style-name.ts";
 import { loadDesignSystem, type LoadedSystem } from "./tailwind.ts";
 
 const verdictFor = (total: number, converted: number, skipped: number): FileResult["verdict"] => {
@@ -14,8 +14,23 @@ const verdictFor = (total: number, converted: number, skipped: number): FileResu
   return "partial";
 };
 
-export const processFile = (sys: LoadedSystem, file: string): FileResult => {
-  const { usages, namesInUse } = scanFile(fs.readFileSync(file, "utf8"), file);
+/**
+ * What survives the scan pass. The source is the largest thing a scan touches and the only thing
+ * it needs from it is a free variable name, so the name is taken and the text is let go.
+ */
+type Scanned = { file: string; usages: ScanResult["usages"]; objectName: string };
+
+const scanOne = (file: string): Scanned => {
+  const code = fs.readFileSync(file, "utf8");
+  const { usages } = scanFile(code, file);
+  return {
+    file,
+    usages,
+    objectName: usages.length > 0 ? styleObjectName(nameIsTaken(code)) : "styles",
+  };
+};
+
+const resultFor = (sys: LoadedSystem, { file, usages, objectName }: Scanned): FileResult => {
   const lines: FileResult["skips"] = [];
   const mismatches: FileResult["mismatches"] = [];
   const styles: Record<string, Style> = {};
@@ -44,16 +59,24 @@ export const processFile = (sys: LoadedSystem, file: string): FileResult => {
     usages: total,
     converted,
     skipped,
-    source:
-      Object.keys(styles).length > 0 ? printCreate(styles, styleObjectName(namesInUse)) : undefined,
+    source: Object.keys(styles).length > 0 ? printCreate(styles, objectName) : undefined,
     skips: lines,
     mismatches,
   };
 };
 
+export const processFile = (sys: LoadedSystem, file: string): FileResult =>
+  resultFor(sys, scanOne(file));
+
 export const plan = async (entryCss: string, files: string[]): Promise<Report> => {
   const sys = await loadDesignSystem(entryCss);
-  const results = files.map(f => processFile(sys, f));
+
+  const scanned = files.map(scanOne);
+  warmUp(
+    sys.ds,
+    scanned.flatMap(s => s.usages.map(u => u.classNames)),
+  );
+  const results = scanned.map(s => resultFor(sys, s));
 
   const byReason: Record<string, number> = {};
   const byFix: Record<string, number> = {};

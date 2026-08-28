@@ -260,3 +260,35 @@ describe("parsing is tolerant enough to keep going", () => {
     expect(usage?.loc).toEqual({ line: 1, column: 6 });
   });
 });
+
+/**
+ * Usages are numbered el1, el2, ... in the order they are found, so the walk order is part of the
+ * generated output. An element nested inside another element's attribute value must still come
+ * after the attributes written before it, which is the one case where reading attributes off
+ * their element instead of visiting them in place gives a different answer.
+ */
+describe("usages come out in document order", () => {
+  const classesInOrder = (src: string): string[][] =>
+    scanFile(src, "t.tsx").usages.map(u => u.classNames);
+
+  test("an element inside an earlier attribute is found before the later attribute", () => {
+    const src = `export const A = () => <div icon={<Icon className="inner" />} className="outer" />;`;
+    expect(classesInOrder(src)).toEqual([["inner"], ["outer"]]);
+  });
+
+  test("an element inside a later attribute is found after the earlier attribute", () => {
+    const src = `export const A = () => <div className="outer" icon={<Icon className="inner" />} />;`;
+    expect(classesInOrder(src)).toEqual([["outer"], ["inner"]]);
+  });
+
+  test("children come after every attribute of their parent", () => {
+    const src = `export const A = () => <div className="parent"><span className="child" /></div>;`;
+    expect(classesInOrder(src)).toEqual([["parent"], ["child"]]);
+  });
+
+  test("the element is still known, so a style attribute beside it is still caught", () => {
+    const src = `export const A = () => <div icon={<Icon className="inner" />} className="outer" style={{ top: 0 }} />;`;
+    const outer = scanFile(src, "t.tsx").usages.find(u => u.classNames[0] === "outer");
+    expect(outer?.skips.map(s => s.reason)).toEqual(["two-style-sources"]);
+  });
+});

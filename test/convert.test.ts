@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import path from "node:path";
 
-import { convert } from "../src/convert.ts";
+import { convert, warmUp } from "../src/convert.ts";
 import { DEFAULT_FIX, fixFor, REASONS, type Reason } from "../src/skip.ts";
 import { loadDesignSystem, type DesignSystem, type LoadedSystem } from "../src/tailwind.ts";
 
@@ -14,12 +14,11 @@ beforeAll(async () => {
 const run = (classes: string) => convert(sys.ds, "t", classes.split(/\s+/).filter(Boolean));
 
 describe("convert decides once what counts as converted", () => {
-  test("clean classes produce a style, a source and no skips", () => {
+  test("clean classes produce a style and no skips", () => {
     const out = run("flex items-center p-4");
     expect(out.skips).toEqual([]);
     expect(out.mismatches).toEqual([]);
     expect(out.style).toBeDefined();
-    expect(out.source).toContain("stylex.create");
     expect(out.rules).toBeGreaterThan(0);
   });
 
@@ -28,7 +27,6 @@ describe("convert decides once what counts as converted", () => {
   test("one unconvertible class withholds the whole style", () => {
     const out = run("flex items-center p-4 [&_svg]:size-4");
     expect(out.style).toBeUndefined();
-    expect(out.source).toBeUndefined();
     expect(out.skips.map(s => s.reason)).toContain("descendant-selector");
   });
 
@@ -79,7 +77,6 @@ describe("when our own output is wrong, we say so and convert nothing", () => {
   test("a compile error still withholds the style", () => {
     const out = convert(uncompilable, "t", ["x"]);
     expect(out.style).toBeUndefined();
-    expect(out.source).toBeUndefined();
     expect(out.rules).toBe(0);
   });
 
@@ -131,5 +128,76 @@ describe("skip vocabulary is complete and honest", () => {
 
   test("reason codes stay kebab-case so agents can match on them", () => {
     for (const reason of REASONS) expect(reason).toMatch(/^[a-z]+(-[a-z]+)*$/);
+  });
+});
+
+/**
+ * `warmUp` verifies the whole run in one StyleX compile, so one style StyleX rejects would take
+ * every other style down with it. The batch halves until the culprit is alone; these pin that the
+ * survivors still convert and the culprit is still named, whichever position it sits in.
+ */
+describe("one uncompilable style does not poison the batch", () => {
+  const mixed = stubSystem({
+    good: `.good { color: red }\n`,
+    alsogood: `.alsogood { display: flex }\n`,
+    third: `.third { margin-top: 4px }\n`,
+    bad: `.bad { color: red }\n.bad3d { color: blue }\n`,
+  });
+
+  const classesOf = (...names: string[]): string[][] => names.map(n => [n]);
+
+  test("the good styles convert and the bad one is named", () => {
+    warmUp(mixed, classesOf("good", "alsogood", "bad", "third"));
+    expect(convert(mixed, "a", ["good"]).style).toBeDefined();
+    expect(convert(mixed, "b", ["alsogood"]).style).toBeDefined();
+    expect(convert(mixed, "c", ["third"]).style).toBeDefined();
+    expect(convert(mixed, "d", ["bad"]).skips.map(s => s.reason)).toEqual(["stylex-compile-error"]);
+  });
+
+  test("the culprit is found wherever it sits in the batch", () => {
+    for (const order of [
+      ["bad", "good", "alsogood", "third"],
+      ["good", "alsogood", "third", "bad"],
+      ["good", "bad", "third", "alsogood"],
+    ]) {
+      const fresh = stubSystem({
+        good: `.good { color: red }\n`,
+        alsogood: `.alsogood { display: flex }\n`,
+        third: `.third { margin-top: 4px }\n`,
+        bad: `.bad { color: red }\n.bad3d { color: blue }\n`,
+      });
+      warmUp(fresh, classesOf(...order));
+      expect(convert(fresh, "x", ["bad"]).style).toBeUndefined();
+      for (const ok of ["good", "alsogood", "third"])
+        expect(convert(fresh, "x", [ok]).style).toBeDefined();
+    }
+  });
+
+  /**
+   * Without this, the test passes whether or not the batch splits: anything warmUp fails to
+   * memoise, convert just recomputes. Sealing the system after warmUp makes recomputation
+   * impossible, so a good style that still converts can only have come from the batch.
+   */
+  test("the survivors are memoised by warmUp, not recomputed later", () => {
+    let sealed = false;
+    const base = stubSystem({
+      good: `.good { color: red }\n`,
+      bad: `.bad { color: red }\n.bad3d { color: blue }\n`,
+    });
+    const sealing: DesignSystem = {
+      ...base,
+      candidatesToCss: names => {
+        if (sealed) throw new Error("recomputed after warmUp");
+        return base.candidatesToCss(names);
+      },
+    };
+
+    warmUp(sealing, classesOf("good", "bad"));
+    sealed = true;
+
+    expect(convert(sealing, "x", ["good"]).style).toBeDefined();
+    expect(convert(sealing, "x", ["bad"]).skips.map(s => s.reason)).toEqual([
+      "stylex-compile-error",
+    ]);
   });
 });

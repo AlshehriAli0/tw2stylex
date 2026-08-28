@@ -92,3 +92,35 @@ export const printCreate = (styleMap: Record<string, Style>, varName = "styles")
     .join("\n");
   return `const ${varName} = stylex.create({\n${body}\n});`;
 };
+
+export type Declaration = { property: string; conditions: string[]; value: string | number | null };
+
+/**
+ * A style broken into the individual declarations StyleX will compile it into. StyleX turns each
+ * one into its own atomic class independently of the others, so a declaration seen in one style
+ * needs no second look when it turns up in the next.
+ */
+export const declarationsOf = (style: Style): Declaration[] => {
+  const flat: Declaration[] = [];
+
+  const walk = (value: StyleValue, property: string, conditions: string[]): void => {
+    if (isTree(value)) {
+      for (const [cond, inner] of Object.entries(value))
+        walk(inner, property, [...conditions, cond]);
+      return;
+    }
+    flat.push({ property, conditions, value });
+  };
+
+  for (const [property, value] of Object.entries(style)) walk(value, property, []);
+  return flat;
+};
+
+export const asStyle = ({ property, conditions, value }: Declaration): Style => {
+  let nested: StyleValue = value;
+  for (let i = conditions.length - 1; i >= 0; i -= 1) nested = { [conditions[i] ?? ""]: nested };
+  return { [property]: nested };
+};
+
+export const declarationKey = ({ property, conditions, value }: Declaration): string =>
+  JSON.stringify([property, conditions, value]);

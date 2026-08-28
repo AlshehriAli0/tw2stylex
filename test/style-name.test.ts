@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { Usage, UsageKind } from "../src/scan-file.ts";
-import { styleNameFor, styleObjectName } from "../src/style-name.ts";
+import { nameIsTaken, styleNameFor, styleObjectName } from "../src/style-name.ts";
 
 const usage = (kind: UsageKind, over: Partial<Usage> = {}): Usage => ({
   classNames: ["flex"],
@@ -97,20 +97,24 @@ describe("names never collide", () => {
 });
 
 describe("the style object avoids names the file already uses", () => {
+  const nameFor = (code: string): string => styleObjectName(nameIsTaken(code));
+
   test("a file with no clash gets the obvious name", () => {
-    expect(styleObjectName(new Set(["React", "cn"]))).toBe("styles");
+    expect(nameFor(`import React from "react";\nimport { cn } from "./cn";\n`)).toBe("styles");
   });
 
   // A component with a `styles` prop shadows a module-level `const styles`, so
   // `stylex.props(styles.el1)` reads the prop and every style silently vanishes.
   test("a file that already binds styles gets a different one", () => {
-    expect(styleObjectName(new Set(["styles"]))).toBe("tw2sxStyles");
+    expect(nameFor(`export const C = ({ styles }) => <div />;`)).toBe("tw2sxStyles");
   });
 
   test("both taken keeps counting", () => {
-    expect(styleObjectName(new Set(["styles", "tw2sxStyles"]))).toBe("tw2sxStyles2");
-    expect(styleObjectName(new Set(["styles", "tw2sxStyles", "tw2sxStyles2"]))).toBe(
-      "tw2sxStyles3",
-    );
+    expect(nameFor(`const styles = 1; const tw2sxStyles = 2;`)).toBe("tw2sxStyles2");
+    expect(nameFor(`const styles = 1, tw2sxStyles = 2, tw2sxStyles2 = 3;`)).toBe("tw2sxStyles3");
+  });
+
+  test("a longer name that merely contains the candidate does not count as a clash", () => {
+    expect(nameFor(`const styleSheet = 1; const myStyles = 2;`)).toBe("styles");
   });
 });

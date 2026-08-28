@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { enableCompileCache } from "node:module";
+
 import { parseArgs, positionalAt, flagWasPassed, type Args } from "./args.ts";
 import {
   applyCommand,
@@ -13,6 +15,17 @@ import {
 import { EXIT, fail } from "./fail.ts";
 import { version } from "./init.ts";
 import { FIX_MEANING, FIXES, REASONS } from "./skip.ts";
+
+/**
+ * Compiling Babel, StyleX, Tailwind and postcss from source is a fixed cost paid before any work
+ * starts, and the migration loop runs this command over and over. Node keeps the compiled
+ * bytecode on disk, so only the first run pays. Older runtimes without it lose nothing.
+ */
+try {
+  enableCompileCache();
+} catch {
+  // No cache available; the run is correct either way.
+}
 
 const HELP = `tw2sx - convert Tailwind v4 to StyleX.
 

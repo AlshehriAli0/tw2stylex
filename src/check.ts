@@ -1,13 +1,40 @@
-import { transformSync } from "@babel/core";
-import stylexPluginMod from "@stylexjs/babel-plugin";
+import { createRequire } from "node:module";
+
 import postcss from "postcss";
 
-import { cjsDefault } from "./cjs.ts";
+import { cjsDefault, isRecord } from "./cjs.ts";
 import type { ResolvedClasses } from "./classes-to-css.ts";
 import { printCreate, type Style } from "./css-to-stylex.ts";
 
-const stylexPlugin: unknown =
-  typeof stylexPluginMod === "function" ? stylexPluginMod : cjsDefault(stylexPluginMod);
+/**
+ * Babel and the StyleX plugin are the slowest imports in the tool and only verification needs
+ * them, so they are fetched at the moment of use. In a normal run that moment is inside the
+ * verifier thread, and the main thread never loads them at all.
+ */
+const req = createRequire(import.meta.url);
+
+type Transform = typeof import("@babel/core").transformSync;
+
+type Babel = { transformSync: Transform; plugin: unknown };
+
+const isTransform = (v: unknown): v is Transform => typeof v === "function";
+
+let loaded: Babel | undefined;
+
+const babel = (): Babel => {
+  if (loaded) return loaded;
+  const core: unknown = req("@babel/core");
+  const mod: unknown = req("@stylexjs/babel-plugin");
+  if (!isRecord(core) || !isTransform(core.transformSync))
+    throw new Error("@babel/core did not provide transformSync.");
+
+  const ready: Babel = {
+    transformSync: core.transformSync,
+    plugin: typeof mod === "function" ? mod : cjsDefault(mod),
+  };
+  loaded = ready;
+  return ready;
+};
 
 export type CompiledRule = { className: string; css: string; priority: number };
 
@@ -32,9 +59,6 @@ export type DeclarationGroup = { path: Condition[]; props: Map<Property, Value> 
 
 type DeclIndex = Map<Condition, Map<Property, Value>>;
 
-let compileCount = 0;
-const newFilename = (): string => `/tw2sx/virtual-${compileCount++}.js`;
-
 type StyleXRule = [className: string, css: { ltr: string }, priority: number];
 type StyleXMeta = StyleXRule[];
 
@@ -56,15 +80,30 @@ const PLUGIN_OPTIONS = {
   unstable_moduleResolution: { type: "commonJS", rootDir: "/tw2sx" },
 };
 
+/**
+ * Babel re-resolves its configuration whenever the options it is handed are a new object, and
+ * this runs once per distinct class string. Hoisting the whole thing means one resolution for
+ * the process instead of thousands.
+ */
+type TransformOptions = Parameters<Transform>[1];
+
+let babelOptions: TransformOptions | undefined;
+
+const optionsFor = (plugin: unknown): TransformOptions => {
+  babelOptions ??= {
+    filename: "/tw2sx/virtual.js",
+    babelrc: false,
+    configFile: false,
+    plugins: [[plugin, PLUGIN_OPTIONS]],
+  };
+  return babelOptions;
+};
+
 export const compileStyleX = (source: string): { rules: CompiledRule[] } | { error: string } => {
   const code = `import * as stylex from '@stylexjs/stylex';\n${source}\nexport { styles };\n`;
   try {
-    const res = transformSync(code, {
-      filename: newFilename(),
-      babelrc: false,
-      configFile: false,
-      plugins: [[stylexPlugin, PLUGIN_OPTIONS]],
-    });
+    const { transformSync, plugin } = babel();
+    const res = transformSync(code, optionsFor(plugin));
     const rules = readMeta(res?.metadata).map(([className, rule, priority]) => ({
       className,
       css: rule.ltr,
@@ -79,31 +118,55 @@ export const compileStyleX = (source: string): { rules: CompiledRule[] } | { err
 const conditionPart = (selector: string): string =>
   selector.replace(/^(\.[A-Za-z0-9_-]+)+/, "").replace(/:not\(#\\?#\)/g, "");
 
-export const declsFromRules = (rules: CompiledRule[]): DeclarationGroup[] => {
-  const groups: DeclarationGroup[] = [];
-  const byCondition = new Map<string, DeclarationGroup>();
+type FlatDecl = { path: string[]; property: string; value: string };
+
+/**
+ * An atomic rule is shared by every style that uses that declaration, so the same handful of
+ * bytes would otherwise be parsed once per style. The class name is a hash of the rule, which
+ * makes it a free cache key.
+ */
+const flatByClassName = new Map<string, FlatDecl[]>();
+
+const flattenRule = (css: string): FlatDecl[] => {
+  const flat: FlatDecl[] = [];
 
   const walk = (node: postcss.Container, path: string[]): void => {
     node.each(child => {
-      if (child.type === "decl") {
-        const key = path.join(" ");
-        let group = byCondition.get(key);
-        if (!group) {
-          group = { path, props: new Map<string, string>() };
-          byCondition.set(key, group);
-          groups.push(group);
-        }
-        group.props.set(child.prop, child.value.trim());
-      } else if (child.type === "atrule") {
-        walk(child, [...path, `@${child.name} ${child.params}`]);
-      } else if (child.type === "rule") {
+      if (child.type === "decl")
+        flat.push({ path, property: child.prop, value: child.value.trim() });
+      else if (child.type === "atrule") walk(child, [...path, `@${child.name} ${child.params}`]);
+      else if (child.type === "rule") {
         const suffix = conditionPart(child.selector);
         walk(child, suffix ? [...path, suffix] : path);
       }
     });
   };
 
-  for (const { css } of rules) walk(postcss.parse(css), []);
+  walk(postcss.parse(css), []);
+  return flat;
+};
+
+export const declsFromRules = (rules: CompiledRule[]): DeclarationGroup[] => {
+  const groups: DeclarationGroup[] = [];
+  const byCondition = new Map<string, DeclarationGroup>();
+
+  for (const { className, css } of rules) {
+    let flat = flatByClassName.get(className);
+    if (!flat) {
+      flat = flattenRule(css);
+      flatByClassName.set(className, flat);
+    }
+    for (const { path, property, value } of flat) {
+      const key = path.join(" ");
+      let group = byCondition.get(key);
+      if (!group) {
+        group = { path, props: new Map<string, string>() };
+        byCondition.set(key, group);
+        groups.push(group);
+      }
+      group.props.set(property, value);
+    }
+  }
   return groups;
 };
 
@@ -214,18 +277,100 @@ const unexpected = (styleName: string, expected: DeclIndex, actual: DeclIndex): 
       stylex: got,
     }));
 
-export const checkStyle = (name: string, resolved: ResolvedClasses, ns: Style): VerifyResult => {
-  const compiled = compileStyleX(printCreate({ [name]: ns }));
-  if ("error" in compiled) return { ok: false, kind: "compile-error", message: compiled.error };
-
+export const compareStyle = (
+  name: string,
+  resolved: ResolvedClasses,
+  rules: CompiledRule[],
+): VerifyResult => {
   const expected = indexByCondition([...resolved.declarations.values()], toKebabCase);
-  const actual = indexByCondition(declsFromRules(compiled.rules), asIs);
+  const actual = indexByCondition(declsFromRules(rules), asIs);
   const mismatches = [
     ...missingOrWrong(name, expected, actual),
     ...unexpected(name, expected, actual),
   ];
 
-  if (mismatches.length > 0)
-    return { ok: false, kind: "mismatch", mismatches, rules: compiled.rules };
-  return { ok: true, rules: compiled.rules };
+  if (mismatches.length > 0) return { ok: false, kind: "mismatch", mismatches, rules };
+  return { ok: true, rules };
+};
+
+export const checkStyle = (name: string, resolved: ResolvedClasses, ns: Style): VerifyResult => {
+  const compiled = compileStyleX(printCreate({ [name]: ns }));
+  if ("error" in compiled) return { ok: false, kind: "compile-error", message: compiled.error };
+  return compareStyle(name, resolved, compiled.rules);
+};
+
+/**
+ * StyleX charges per compile, not per style, so one call for the whole run costs about what a
+ * dozen single calls do. The compiled object literal says which atomic classes each key ended up
+ * with, which is what lets the rules be handed back to the style they came from.
+ */
+const classNamesByStyle = (ast: unknown): Map<string, string[]> => {
+  const found = new Map<string, string[]>();
+  const program = isRecord(ast) && isRecord(ast.program) ? ast.program : undefined;
+  const body: unknown = program?.body;
+  if (!Array.isArray(body)) return found;
+
+  for (const statement of body) {
+    const declarations = isRecord(statement) ? statement.declarations : undefined;
+    if (!Array.isArray(declarations)) continue;
+    for (const declarator of declarations) {
+      const init = isRecord(declarator) ? declarator.init : undefined;
+      if (!isRecord(init) || !Array.isArray(init.properties)) continue;
+      for (const property of init.properties) readStyleEntry(property, found);
+    }
+  }
+  return found;
+};
+
+const literalKey = (node: unknown): string | undefined => {
+  if (!isRecord(node)) return undefined;
+  if (typeof node.name === "string") return node.name;
+  return typeof node.value === "string" ? node.value : undefined;
+};
+
+const readStyleEntry = (property: unknown, into: Map<string, string[]>): void => {
+  if (!isRecord(property)) return;
+  const name = literalKey(property.key);
+  const value = property.value;
+  if (name === undefined || !isRecord(value) || !Array.isArray(value.properties)) return;
+
+  const classes: string[] = [];
+  for (const entry of value.properties) {
+    if (!isRecord(entry)) continue;
+    if (literalKey(entry.key) === "$$css") continue;
+    const literal = isRecord(entry.value) ? entry.value.value : undefined;
+    if (typeof literal === "string") classes.push(...literal.split(" ").filter(Boolean));
+  }
+  into.set(name, classes);
+};
+
+export type BatchResult = { rules: Map<string, CompiledRule[]> } | { error: string };
+
+export const compileMany = (styles: Record<string, Style>): BatchResult => {
+  const code = `import * as stylex from '@stylexjs/stylex';\n${printCreate(styles)}\nexport { styles };\n`;
+  let res;
+  try {
+    const { transformSync, plugin } = babel();
+    res = transformSync(code, { ...optionsFor(plugin), ast: true, code: false });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+
+  const byClassName = new Map<string, CompiledRule>();
+  for (const [className, rule, priority] of readMeta(res?.metadata))
+    byClassName.set(className, { className, css: rule.ltr, priority });
+
+  const owned = classNamesByStyle(res?.ast);
+  const rules = new Map<string, CompiledRule[]>();
+  for (const name of Object.keys(styles)) {
+    const mine = owned.get(name) ?? [];
+    rules.set(
+      name,
+      mine.flatMap(className => {
+        const rule = byClassName.get(className);
+        return rule ? [rule] : [];
+      }),
+    );
+  }
+  return { rules };
 };

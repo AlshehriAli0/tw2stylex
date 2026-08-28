@@ -28,10 +28,20 @@ export const styleNameFor = (usage: Usage, index: number, used: Set<string>): st
 
 const PREFERRED = ["styles", "tw2sxStyles"];
 
-export const styleObjectName = (namesInUse: Set<string>): string => {
-  const free = PREFERRED.find(name => !namesInUse.has(name));
+/**
+ * Only a handful of names are ever candidates, so asking the text about those beats collecting
+ * every identifier in the file. A match inside a comment or a string counts as taken, which costs
+ * nothing but the next name on the list.
+ */
+export const nameIsTaken =
+  (code: string) =>
+  (name: string): boolean =>
+    new RegExp(`\\b${name}\\b`).test(code);
+
+export const styleObjectName = (taken: (name: string) => boolean): string => {
+  const free = PREFERRED.find(name => !taken(name));
   if (free !== undefined) return free;
   let n = 2;
-  while (namesInUse.has(`tw2sxStyles${n}`)) n += 1;
+  while (taken(`tw2sxStyles${n}`)) n += 1;
   return `tw2sxStyles${n}`;
 };

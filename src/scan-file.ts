@@ -1,13 +1,19 @@
-import { parse } from "@babel/parser";
-import traverseMod from "@babel/traverse";
-import * as t from "@babel/types";
+import { parseSync, rawTransferSupported, type ParserOptions } from "oxc-parser";
 
-import { cjsDefault } from "./cjs.ts";
+import {
+  child,
+  children,
+  flag,
+  is,
+  lineFinder,
+  literalKey,
+  literalString,
+  span,
+  text,
+  walk as walkTree,
+  type Node,
+} from "./estree.ts";
 import type { Skip } from "./skip.ts";
-
-const isTraverse = (v: unknown): v is typeof traverseMod => typeof v === "function";
-const unwrapped = cjsDefault(traverseMod);
-const traverse = isTraverse(unwrapped) ? unwrapped : traverseMod;
 
 export type Loc = { line: number; column: number };
 
@@ -24,44 +30,28 @@ export type Usage = {
   skips: Skip[];
 };
 
-export type ScanResult = { usages: Usage[]; hasStyleX: boolean; namesInUse: Set<string> };
+export type ScanResult = { usages: Usage[]; hasStyleX: boolean };
 
 const MERGE_FNS = new Set(["cn", "clsx", "classnames", "twMerge", "twJoin", "cx"]);
 
 const looksLikeVariantFunction = (name: string): boolean => name.endsWith("Variants");
 
-const locOf = (node: t.Node): Loc => ({
-  line: node.loc?.start.line ?? 0,
-  column: (node.loc?.start.column ?? 0) + 1,
-});
-
 const splitClasses = (s: string): string[] => s.split(/\s+/).filter(Boolean);
 
-const keyName = (key: t.Node): string | undefined => {
-  if (t.isIdentifier(key)) return key.name;
-  if (t.isStringLiteral(key)) return key.value;
-  if (t.isNumericLiteral(key)) return String(key.value);
-  return undefined;
-};
+const propKey = (prop: Node): string | undefined =>
+  flag(prop, "computed") ? undefined : literalKey(prop.key);
 
-const propKey = (prop: t.ObjectProperty): string | undefined =>
-  prop.computed ? undefined : keyName(prop.key);
-
-const calleeName = (callee: t.Node): string => {
-  if (t.isIdentifier(callee)) return callee.name;
-  if (t.isMemberExpression(callee) && t.isIdentifier(callee.property)) return callee.property.name;
+const calleeName = (callee: Node | undefined): string => {
+  if (!callee) return "";
+  if (is(callee, "Identifier")) return text(callee, "name") ?? "";
+  if (is(callee, "MemberExpression")) {
+    const property = child(callee, "property");
+    if (property && is(property, "Identifier")) return text(property, "name") ?? "";
+  }
   return "";
 };
 
 type Reader = { classes: string[]; skips: Skip[] };
-
-const dynamic = (node: t.Node, detail: string, hint: string): Skip => ({
-  reason: "dynamic-classes",
-  detail: `${detail} at line ${locOf(node).line}.`,
-  hint,
-});
-
-const classesWithoutSkips = (node: t.Node): string[] => readClasses(node).classes;
 
 const TEMPLATE_HINT =
   "Lift the condition into a boolean and apply a separate StyleX style conditionally.";
@@ -72,206 +62,273 @@ const CALL_HINT =
   "Convert it by hand, or add it to the merge-function list if it behaves like clsx.";
 const PROP_HINT = `Give the component a "style?: StyleXStylesWithout<{...}>" prop and pass it last to stylex.props(); see the skill's references/component-api.md.`;
 
-const readTemplate = (n: t.TemplateLiteral, skips: Skip[]): string[] => {
-  if (n.expressions.length > 0)
-    skips.push(
-      dynamic(n, `Template literal with ${n.expressions.length} interpolation(s)`, TEMPLATE_HINT),
-    );
-  return n.quasis.flatMap(q => splitClasses(q.value.cooked ?? q.value.raw));
+/**
+ * Everything a scan reports carries a line, and the parser reports byte offsets, so one line
+ * index per file is built up front and every lookup is a binary search against it.
+ */
+type Reading = { lineAt: (offset: number) => Loc; skips: Skip[] };
+
+const locOf = (r: Reading, node: Node): Loc => {
+  const range = span(node);
+  return range ? r.lineAt(range[0]) : { line: 0, column: 0 };
 };
 
-const readObjectMap = (n: t.ObjectExpression, skips: Skip[]): string[] => {
-  const classes = n.properties.flatMap(prop => {
-    if (!t.isObjectProperty(prop)) return [];
+const dynamic = (r: Reading, node: Node, detail: string, hint: string): Skip => ({
+  reason: "dynamic-classes",
+  detail: `${detail} at line ${locOf(r, node).line}.`,
+  hint,
+});
+
+/** A template chunk carries its text under `value`, cooked unless the escape made that impossible. */
+const quasiText = (quasi: Node): string => {
+  const value = quasi.value;
+  if (typeof value !== "object" || value === null) return "";
+  const { cooked, raw } = value as { cooked?: unknown; raw?: unknown };
+  if (typeof cooked === "string") return cooked;
+  return typeof raw === "string" ? raw : "";
+};
+
+const readTemplate = (r: Reading, n: Node): string[] => {
+  const expressions = children(n, "expressions");
+  if (expressions.length > 0)
+    r.skips.push(
+      dynamic(r, n, `Template literal with ${expressions.length} interpolation(s)`, TEMPLATE_HINT),
+    );
+  return children(n, "quasis").flatMap(q => splitClasses(quasiText(q)));
+};
+
+const readObjectMap = (r: Reading, n: Node): string[] => {
+  const classes = children(n, "properties").flatMap(prop => {
+    if (!is(prop, "Property")) return [];
     const key = propKey(prop);
     return key === undefined ? [] : splitClasses(key);
   });
-  skips.push(dynamic(n, "Object-form class map", OBJECT_HINT));
+  r.skips.push(dynamic(r, n, "Object-form class map", OBJECT_HINT));
   return classes;
 };
 
-const readIdentifier = (n: t.Identifier, skips: Skip[]): string[] => {
-  skips.push({
+const readIdentifier = (r: Reading, n: Node): string[] => {
+  r.skips.push({
     reason: "passed-in-classes",
-    detail: `Variable "${n.name}" flows into a class string at line ${locOf(n).line}.`,
+    detail: `Variable "${text(n, "name") ?? ""}" flows into a class string at line ${locOf(r, n).line}.`,
     hint: PROP_HINT,
   });
   return [];
 };
 
-export const readClasses = (node: t.Node): Reader => {
-  const skips: Skip[] = [];
-
-  const walk = (n: t.Node): string[] => {
-    if (t.isStringLiteral(n)) return splitClasses(n.value);
-    if (t.isTemplateLiteral(n)) return readTemplate(n, skips);
-    if (t.isArrayExpression(n)) return n.elements.flatMap(e => (e ? walk(e) : []));
-    if (t.isObjectExpression(n)) return readObjectMap(n, skips);
-    if (t.isIdentifier(n)) return readIdentifier(n, skips);
-    if (t.isCallExpression(n)) return walkCall(n);
-    if (t.isConditionalExpression(n)) return walkTernary(n);
-    if (t.isLogicalExpression(n)) return walkLogical(n);
-    return [];
-  };
-
-  const walkCall = (n: t.CallExpression): string[] => {
-    const name = calleeName(n.callee);
-    if (MERGE_FNS.has(name)) return n.arguments.flatMap(a => walk(a));
-
-    if (looksLikeVariantFunction(name)) {
-      skips.push({
-        reason: "variant-function",
-        detail: `${name}() looks like a cva() variant function defined in another file.`,
-        hint: `Run tw2sx plan over the file that defines ${name} as well - its styles are converted there.`,
-      });
-      return [];
-    }
-
-    skips.push(
-      dynamic(
-        n,
-        `Call to ${name || "an expression"}() is not a known class-merging helper`,
-        CALL_HINT,
-      ),
-    );
-    return [];
-  };
-
-  const walkTernary = (n: t.ConditionalExpression): string[] => {
-    skips.push(dynamic(n, "Ternary in a class expression", TERNARY_HINT));
-    return [...classesWithoutSkips(n.consequent), ...classesWithoutSkips(n.alternate)];
-  };
-
-  const walkLogical = (n: t.LogicalExpression): string[] => {
-    skips.push(dynamic(n, "Conditional (&&/||) class", LOGICAL_HINT));
-    return classesWithoutSkips(n.right);
-  };
-
-  return { classes: walk(node), skips };
+const readWith = (r: Reading, node: Node): string[] => {
+  const literal = literalString(node);
+  if (literal !== undefined) return splitClasses(literal);
+  if (is(node, "TemplateLiteral")) return readTemplate(r, node);
+  if (is(node, "ArrayExpression")) return children(node, "elements").flatMap(e => readWith(r, e));
+  if (is(node, "ObjectExpression")) return readObjectMap(r, node);
+  if (is(node, "Identifier")) return readIdentifier(r, node);
+  if (is(node, "CallExpression")) return readCall(r, node);
+  if (is(node, "ConditionalExpression")) return readTernary(r, node);
+  if (is(node, "LogicalExpression")) return readLogical(r, node);
+  return [];
 };
 
-const classExpression = (attr: t.JSXAttribute): t.Node | undefined => {
-  if (!t.isJSXIdentifier(attr.name)) return undefined;
-  if (attr.name.name !== "className" && attr.name.name !== "class") return undefined;
-  const v = attr.value;
-  if (t.isStringLiteral(v)) return v;
-  if (t.isJSXExpressionContainer(v) && !t.isJSXEmptyExpression(v.expression)) return v.expression;
-  return undefined;
+const quietly = (node: Node | undefined, lineAt: Reading["lineAt"]): string[] =>
+  node ? readWith({ lineAt, skips: [] }, node) : [];
+
+const readCall = (r: Reading, n: Node): string[] => {
+  const name = calleeName(child(n, "callee"));
+  if (MERGE_FNS.has(name)) return children(n, "arguments").flatMap(a => readWith(r, a));
+
+  if (looksLikeVariantFunction(name)) {
+    r.skips.push({
+      reason: "variant-function",
+      detail: `${name}() looks like a cva() variant function defined in another file.`,
+      hint: `Run tw2sx plan over the file that defines ${name} as well - its styles are converted there.`,
+    });
+    return [];
+  }
+
+  r.skips.push(
+    dynamic(
+      r,
+      n,
+      `Call to ${name || "an expression"}() is not a known class-merging helper`,
+      CALL_HINT,
+    ),
+  );
+  return [];
 };
 
-const styleAttrSkip = (element: t.JSXOpeningElement): Skip | undefined => {
-  const styleAttr = element.attributes.find(
-    (a): a is t.JSXAttribute =>
-      t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === "style",
+const readTernary = (r: Reading, n: Node): string[] => {
+  r.skips.push(dynamic(r, n, "Ternary in a class expression", TERNARY_HINT));
+  return [
+    ...quietly(child(n, "consequent"), r.lineAt),
+    ...quietly(child(n, "alternate"), r.lineAt),
+  ];
+};
+
+const readLogical = (r: Reading, n: Node): string[] => {
+  r.skips.push(dynamic(r, n, "Conditional (&&/||) class", LOGICAL_HINT));
+  return quietly(child(n, "right"), r.lineAt);
+};
+
+export const readClasses = (node: Node, lineAt: Reading["lineAt"]): Reader => {
+  const r: Reading = { lineAt, skips: [] };
+  return { classes: readWith(r, node), skips: r.skips };
+};
+
+const attributeName = (attr: Node): string | undefined => {
+  const name = child(attr, "name");
+  return name && is(name, "JSXIdentifier") ? text(name, "name") : undefined;
+};
+
+const classExpression = (attr: Node): Node | undefined => {
+  const name = attributeName(attr);
+  if (name !== "className" && name !== "class") return undefined;
+
+  const value = child(attr, "value");
+  if (!value) return undefined;
+  if (literalString(value) !== undefined) return value;
+  if (!is(value, "JSXExpressionContainer")) return undefined;
+
+  const inner = child(value, "expression");
+  return inner && !is(inner, "JSXEmptyExpression") ? inner : undefined;
+};
+
+const styleAttrSkip = (r: Reading, element: Node): Skip | undefined => {
+  const styleAttr = children(element, "attributes").find(
+    a => is(a, "JSXAttribute") && attributeName(a) === "style",
   );
   if (!styleAttr) return undefined;
   return {
     reason: "two-style-sources",
-    detail: `This element has both className and a style attribute (line ${locOf(styleAttr).line}).`,
+    detail: `This element has both className and a style attribute (line ${locOf(r, styleAttr).line}).`,
     hint: "Fold the inline style into the StyleX style, or use a dynamic style function - an element cannot have both stylex.props() and a style prop.",
   };
 };
 
-const isHostElement = (element: t.JSXOpeningElement): boolean =>
-  t.isJSXIdentifier(element.name) && /^[a-z]/.test(element.name.name);
-
-const rangeOf = (node: t.Node): [number, number] | undefined =>
-  node.start !== null && node.start !== undefined && node.end !== null && node.end !== undefined
-    ? [node.start, node.end]
-    : undefined;
+const isHostElement = (element: Node): boolean => {
+  const name = child(element, "name");
+  if (!name || !is(name, "JSXIdentifier")) return false;
+  return /^[a-z]/.test(text(name, "name") ?? "");
+};
 
 const jsxUsage = (
-  attr: t.JSXAttribute,
-  element: t.JSXOpeningElement | undefined,
+  attr: Node,
+  element: Node | undefined,
+  lineAt: Reading["lineAt"],
 ): Usage | undefined => {
   const expr = classExpression(attr);
   if (!expr) return undefined;
 
-  const { classes, skips } = readClasses(expr);
-  const conflict = element ? styleAttrSkip(element) : undefined;
-  if (conflict) skips.push(conflict);
-  if (classes.length === 0 && skips.length === 0) return undefined;
+  const r: Reading = { lineAt, skips: [] };
+  const classes = readWith(r, expr);
+  const conflict = element ? styleAttrSkip(r, element) : undefined;
+  if (conflict) r.skips.push(conflict);
+  if (classes.length === 0 && r.skips.length === 0) return undefined;
 
   return {
     classNames: classes,
-    loc: locOf(attr),
-    attributeRange: rangeOf(attr),
+    loc: locOf(r, attr),
+    attributeRange: span(attr),
     onHostElement: element ? isHostElement(element) : false,
-    kind: t.isCallExpression(expr) ? "cn-call" : "literal",
-    skips,
+    kind: is(expr, "CallExpression") ? "cn-call" : "literal",
+    skips: r.skips,
   };
 };
 
-const axisUsages = (variantAxis: string, values: t.ObjectExpression): Usage[] =>
-  values.properties.flatMap(value => {
-    if (!t.isObjectProperty(value)) return [];
-    const { classes, skips } = readClasses(value.value);
+const axisUsages = (variantAxis: string, values: Node, lineAt: Reading["lineAt"]): Usage[] =>
+  children(values, "properties").flatMap(value => {
+    if (!is(value, "Property")) return [];
+    const inner = child(value, "value");
+    const r: Reading = { lineAt, skips: [] };
+    const classes = inner ? readWith(r, inner) : [];
     return [
       {
         classNames: classes,
-        loc: locOf(value),
+        loc: locOf(r, value),
         kind: "cva-variant" as const,
         variantAxis,
         variantValue: propKey(value) ?? "",
-        skips,
+        skips: r.skips,
       },
     ];
   });
 
-const cvaVariantUsages = (config: t.ObjectExpression): Usage[] => {
-  const variants = config.properties.find(
-    (p): p is t.ObjectProperty => t.isObjectProperty(p) && propKey(p) === "variants",
+const cvaVariantUsages = (config: Node, lineAt: Reading["lineAt"]): Usage[] => {
+  const variants = children(config, "properties").find(
+    p => is(p, "Property") && propKey(p) === "variants",
   );
-  if (!variants || !t.isObjectExpression(variants.value)) return [];
+  const axes = variants ? child(variants, "value") : undefined;
+  if (!axes || !is(axes, "ObjectExpression")) return [];
 
-  return variants.value.properties.flatMap(axis =>
-    t.isObjectProperty(axis) && t.isObjectExpression(axis.value)
-      ? axisUsages(propKey(axis) ?? "", axis.value)
-      : [],
-  );
+  return children(axes, "properties").flatMap(axis => {
+    const values = is(axis, "Property") ? child(axis, "value") : undefined;
+    return values && is(values, "ObjectExpression")
+      ? axisUsages(propKey(axis) ?? "", values, lineAt)
+      : [];
+  });
 };
 
-const cvaUsages = (call: t.CallExpression): Usage[] => {
-  const [base, config] = call.arguments;
+const cvaUsages = (call: Node, lineAt: Reading["lineAt"]): Usage[] => {
+  const [base, config] = children(call, "arguments");
   const usages: Usage[] = [];
 
   if (base) {
-    const { classes, skips } = readClasses(base);
-    usages.push({ classNames: classes, loc: locOf(call), kind: "cva-base", skips });
+    const r: Reading = { lineAt, skips: [] };
+    const classes = readWith(r, base);
+    usages.push({ classNames: classes, loc: locOf(r, call), kind: "cva-base", skips: r.skips });
   }
-  if (config && t.isObjectExpression(config)) usages.push(...cvaVariantUsages(config));
+  if (config && is(config, "ObjectExpression")) usages.push(...cvaVariantUsages(config, lineAt));
   return usages;
 };
 
+/**
+ * Half of a real codebase is hooks, types and utilities with no styling in them at all. Parsing
+ * those costs more than reading them. Anything this misses is a file that could not have held a
+ * usage, because a usage only ever comes from a class attribute or a cva() call.
+ */
+const MIGHT_STYLE = /className|class\s*=|\bcva\s*\(|@stylexjs\//;
+
+/**
+ * Reads the parser's own buffer instead of serialising the tree through JSON, which is most of
+ * what parsing a file costs. It throws outright where it is unsupported — 32-bit, big-endian,
+ * older runtimes, and bun — so the runtime is asked first and the ordinary tree is used
+ * otherwise: slower, identical output. Nothing here outlives the scan, so the buffer's lifetime
+ * never becomes the caller's problem.
+ */
+type RawTransfer = ParserOptions & { experimentalRawTransfer?: boolean };
+
+const PARSE: RawTransfer = rawTransferSupported() ? { experimentalRawTransfer: true } : {};
+
 export const scanFile = (code: string, filename: string): ScanResult => {
-  const ast = parse(code, {
-    sourceFilename: filename,
-    sourceType: "module",
-    plugins: ["jsx", "typescript", "decorators-legacy"],
-    errorRecovery: true,
-  });
+  if (!MIGHT_STYLE.test(code)) return { usages: [], hasStyleX: false };
+
+  const { program } = parseSync(filename, code, PARSE);
+  const lineAt = lineFinder(code);
 
   const usages: Usage[] = [];
-  const namesInUse = new Set<string>();
   let hasStyleX = false;
 
-  traverse(ast, {
-    Identifier(p) {
-      namesInUse.add(p.node.name);
-    },
-    ImportDeclaration(p) {
-      if (p.node.source.value.startsWith("@stylexjs/")) hasStyleX = true;
-    },
-    JSXAttribute(p) {
-      const parent = p.parentPath.node;
-      const element = t.isJSXOpeningElement(parent) ? parent : undefined;
-      const usage = jsxUsage(p.node, element);
+  /**
+   * Attributes are noted down by their element on the way past and handled where the walk reaches
+   * them, which keeps the usages in document order even when an attribute value holds another
+   * element. Numbering in the generated output follows that order.
+   */
+  const elementOf = new Map<Node, Node>();
+
+  walkTree(program, node => {
+    if (is(node, "JSXOpeningElement")) {
+      for (const attr of children(node, "attributes"))
+        if (is(attr, "JSXAttribute")) elementOf.set(attr, node);
+    } else if (is(node, "JSXAttribute")) {
+      const usage = jsxUsage(node, elementOf.get(node), lineAt);
       if (usage) usages.push(usage);
-    },
-    CallExpression(p) {
-      if (calleeName(p.node.callee) === "cva") usages.push(...cvaUsages(p.node));
-    },
+    } else if (is(node, "CallExpression")) {
+      if (calleeName(child(node, "callee")) === "cva") usages.push(...cvaUsages(node, lineAt));
+    } else if (is(node, "ImportDeclaration")) {
+      const source = child(node, "source");
+      if ((source ? literalString(source) : undefined)?.startsWith("@stylexjs/") === true)
+        hasStyleX = true;
+    }
   });
 
-  return { usages, hasStyleX, namesInUse };
+  return { usages, hasStyleX };
 };
