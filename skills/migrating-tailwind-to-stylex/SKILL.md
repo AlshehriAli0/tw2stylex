@@ -16,19 +16,22 @@ Pixels stay identical. A style you cannot convert stays in the file and goes int
 
 ## The loop
 
-- [ ] 0. StyleX installed and proven to render — [setup.md](references/setup.md). Once per project.
-- [ ] 1. `tw2sx plan <path>` — writes a report, edits nothing.
-- [ ] 2. Read `MISMATCHES`. **At 0, continue. Above 0, stop and tell the user** —
+- [ ] 0. `tw2sx init` — installs this skill into the project. Run it when the `version` in this
+      file's frontmatter differs from `tw2sx --version`: the copy you are reading came from an
+      older tw2sx and may name reasons or a fix order the tool no longer uses.
+- [ ] 1. StyleX installed and proven to render — [setup.md](references/setup.md). Once per project.
+- [ ] 2. `tw2sx plan <path>` — writes a report, edits nothing.
+- [ ] 3. Read `MISMATCHES`. **At 0, continue. Above 0, stop and tell the user** —
       the tool generated StyleX that does not match Tailwind, which is a tw2sx bug.
-- [ ] 3. Fix skips in fix order: every `safe`, then every `needs-lookup`, then every
+- [ ] 4. Fix skips in fix order: every `safe`, then every `needs-lookup`, then every
       `check-first`, then every `unknown`.
-- [ ] 4. `tw2sx plan <path>` again. Continue only when the skip count dropped and mismatches
+- [ ] 5. `tw2sx plan <path>` again. Continue only when the skip count dropped and mismatches
       are still 0.
-- [ ] 5. Repeat from 3 until every remaining skip is one you can name a reason for keeping.
-- [ ] 6. Run the project's own typecheck and build. Both clean.
-- [ ] 7. Load a page you changed and read one converted element's computed styles.
+- [ ] 6. Repeat from 4 until every remaining skip is one you can name a reason for keeping.
+- [ ] 7. Run the project's own typecheck and build. Both clean.
+- [ ] 8. Load a page you changed and read one converted element's computed styles.
       Typechecking proves the code is valid; only this proves it still renders.
-- [ ] 8. Summarise: usages converted, skips resolved, and each skip you kept with why.
+- [ ] 9. Summarise: usages converted, skips resolved, and each skip you kept with why.
 
 `tw2sx explain "<classes>"` prints the exact StyleX object for any class string and whether it
 verified. Reach for it whenever you are about to write a value from memory.
@@ -69,7 +72,7 @@ stylex.props(styles.base, styles.variant)   // -> Z. The :hover rule is gone.
 
 Make this a compile error instead of a thing you remember — see [component-api.md](references/component-api.md).
 
-**Fourteen shorthands compile to nothing.** `background`, `border`, `animation`, `all`, and every
+**These shorthands compile to nothing.** `background`, `border`, `animation`, `all`, and every
 directional border — `borderTop`/`Right`/`Bottom`/`Left`,
 `borderInline`/`Block`/`InlineStart`/`InlineEnd`/`BlockStart`/`BlockEnd`. Each skip's hint names
 the longhands to write. These stay whole: `margin`, `padding`, `inset`, `flex`, `transition`,

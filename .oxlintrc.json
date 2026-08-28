@@ -194,7 +194,7 @@
     "dist/**",
     "**/*.d.ts",
     "docs/**",
-    "skill/**",
+    "skills/**",
     "test/fixture.css",
     "probe.mjs"
   ],

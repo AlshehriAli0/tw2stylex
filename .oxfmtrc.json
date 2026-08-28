@@ -22,7 +22,7 @@
     "bun.lock",
     "test/fixture.css",
     "docs/**",
-    "skill/**",
+    "skills/**",
     "CONTEXT.md",
     "README.md"
   ]

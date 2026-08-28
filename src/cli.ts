@@ -3,6 +3,7 @@ import { parseArgs, positionalAt, flagWasPassed, type Args } from "./args.ts";
 import {
   applyCommand,
   explainCommand,
+  initCommand,
   isError,
   planCommand,
   readOutput,
@@ -10,6 +11,7 @@ import {
   type CommandResult,
 } from "./commands.ts";
 import { EXIT, fail } from "./fail.ts";
+import { version } from "./init.ts";
 import { FIX_MEANING, FIXES, REASONS } from "./skip.ts";
 
 const HELP = `tw2sx - convert Tailwind v4 to StyleX.
@@ -18,6 +20,7 @@ Converts a usage only when it can prove the CSS comes out the same as Tailwind p
 Everything else it SKIPS and lists, with a reason and how to fix it.
 
 COMMANDS  (nothing writes unless you say --write)
+  tw2sx init                   Install the agent skill into the agent dirs this project has.
   tw2sx explain "<classes>"    Show the StyleX for a class string, and whether it checks out.
   tw2sx plan <path>            Convert + check a folder. Writes a JSON report.
   tw2sx skipped <report.json>  Re-read a report, filtered.
@@ -35,6 +38,7 @@ OPTIONS
   --reason <r>        Show one reason only.
   --fix <f>           Show one fix type only.
   --out <file>        Where to write the report (default .tw2sx/plan-<hash>.json).
+  --all               init only: write to every agent dir, not just the ones present.
   --write             apply only: actually edit files. Without it, apply is a dry run.
   --allow-dirty       apply only: write even with uncommitted changes.
 
@@ -57,6 +61,8 @@ const report = (result: CommandResult, json: boolean): number => {
 const run = async (args: Args): Promise<CommandResult> => {
   const out = readOutput(args);
   switch (positionalAt(args, 0)) {
+    case "init":
+      return initCommand(args, out);
     case "explain":
       return await explainCommand(args, out);
     case "plan":
@@ -79,6 +85,11 @@ const run = async (args: Args): Promise<CommandResult> => {
 const main = async (): Promise<number> => {
   const args = parseArgs(process.argv.slice(2));
   const command = positionalAt(args, 0);
+
+  if (command === "version" || flagWasPassed(args, "version")) {
+    console.log(version());
+    return EXIT.NOTHING_SKIPPED;
+  }
 
   if (command === undefined || command === "help" || flagWasPassed(args, "help")) {
     console.log(HELP);

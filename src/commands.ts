@@ -15,6 +15,7 @@ import { isRecord } from "./cjs.ts";
 import { convert } from "./convert.ts";
 import { EXIT, fail, type Failure } from "./fail.ts";
 import { collectFiles, findEntryCss } from "./find-files.ts";
+import { AGENT_HOMES, homesPresent, installSkill } from "./init.ts";
 import { plan } from "./plan.ts";
 import { renderReport, toSkipLine, type Report, type SkipLine } from "./report.ts";
 import { loadDesignSystem } from "./tailwind.ts";
@@ -79,6 +80,27 @@ const requireExistingPath = (target: string | undefined, usage: string): string 
   if (!fs.existsSync(target))
     return fail("E_NO_SUCH_PATH", EXIT.BAD_ARGUMENTS, `Path not found: ${target}`, usage);
   return target;
+};
+
+export const initCommand = (args: Args, out: Output): CommandResult => {
+  const root = process.cwd();
+  const homes = flagWasPassed(args, "all") ? AGENT_HOMES.map(h => h.home) : homesPresent(root);
+
+  if (homes.length === 0)
+    return fail(
+      "E_NO_AGENT_HOME",
+      EXIT.NOT_READY,
+      `No agent directory in ${root}: looked for ${AGENT_HOMES.map(h => h.home).join(" and ")}.`,
+      `Create the one your agent reads, then re-run. ${AGENT_HOMES.map(h => `${h.home} for ${h.agents}`).join("; ")}. To write both, pass --all.`,
+    );
+
+  const installed = installSkill(root, homes);
+  if (out.json) emit(installed);
+  else {
+    console.log(`tw2sx ${installed.version}: skill installed`);
+    for (const destination of installed.destinations) console.log(`  ${destination}`);
+  }
+  return { exit: EXIT.NOTHING_SKIPPED };
 };
 
 export const explainCommand = async (args: Args, out: Output): Promise<CommandResult> => {

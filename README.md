@@ -39,10 +39,30 @@ Since Tailwind and StyleX are not isomorphic, a partial conversion is the only h
 So the skips *are* the product: a typed, enumerable list of exactly what a human or an agent
 still has to decide, with a recipe for each.
 
+## Install
+
+```bash
+bun add -d tw2sx        # npm i -D tw2sx · pnpm add -D tw2sx
+npx tw2sx init          # installs the agent skill
+```
+
+`init` writes to the agent directories the project already has — `.claude/skills` for Claude
+Code, `.agents/skills` for Codex and Gemini CLI. Same SKILL.md either way; only the directory
+differs. With neither present it writes nothing and names both, because which one to create is
+a choice about who works on this repo. `--all` writes both.
+
+Pin it as a dev dependency rather than reaching for `npx tw2sx@latest`. The migration loop
+compares skip counts run over run, and that comparison only means anything if both runs used
+the same binary. A version that moves under you moves the skip count with it.
+
+`tailwindcss@4` is a peer dependency — tw2sx resolves *your* copy, so your `@theme`,
+`@utility` and `@plugin` are all in scope.
+
 ## Commands
 
 | | |
 |---|---|
+| `tw2sx init` | Install the agent skill into the agent dirs this project has. Safe to re-run. |
 | `tw2sx explain "<classes>"` | Resolve a class string to a StyleX object. Touches nothing. |
 | `tw2sx plan <path>` | Scan, convert, verify. Writes a JSON report. **Never edits code.** |
 | `tw2sx apply <path>` | Rewrite the sites that convert cleanly. Dry run unless `--write`. |
@@ -75,14 +95,17 @@ Reasons: `unknown-class`, `marker-class`, `descendant-selector`, `parent-state`,
 `unsupported-at-rule`, `dynamic-classes`, `variant-function`, `passed-in-classes`,
 `lost-condition`, `two-style-sources`, `stylex-compile-error`.
 
-The list is fixed, and [`skill/references/reason-codes.md`](skill/references/reason-codes.md)
+The list is fixed, and [`skills/migrating-tailwind-to-stylex/references/reason-codes.md`](skills/migrating-tailwind-to-stylex/references/reason-codes.md)
 has one hand-migration recipe per code.
-[`skill/references/tokens.md`](skill/references/tokens.md) covers `@theme` → StyleX tokens, the
+[`skills/migrating-tailwind-to-stylex/references/tokens.md`](skills/migrating-tailwind-to-stylex/references/tokens.md) covers `@theme` → StyleX tokens, the
 `--` variable bridge, and dark mode.
 
 ## The agent skill
 
-[`skill/SKILL.md`](skill/SKILL.md) drives the CLI and teaches the agent to work the skips.
+[`skills/migrating-tailwind-to-stylex/SKILL.md`](skills/migrating-tailwind-to-stylex/SKILL.md)
+drives the CLI and teaches the agent to work the skips. `tw2sx init` copies it into the
+project and stamps the tool version into its frontmatter, so a copy left behind by an older
+tw2sx can say so instead of quietly naming reasons the tool no longer produces.
 Its central rule is the StyleX landmine that silently breaks migrations:
 
 ```js

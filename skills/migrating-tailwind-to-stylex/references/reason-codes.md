@@ -131,7 +131,7 @@ with `hidden` children, the two differ visibly. Check the parent's display befor
 ## `dropped-shorthand` — safe
 
 Split into longhands. The skip's hint names them for the class in front of you; SKILL.md lists
-all fourteen shorthands.
+them all.
 
 `animate-*` is the one that needs more than a rename — define the keyframes:
 
