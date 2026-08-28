@@ -128,7 +128,7 @@ describe("selfSelector distinguishes self from relational", () => {
   });
 });
 
-// ADR-0003: a gate that cannot fail is not a gate.
+// A gate that cannot fail is not a gate.
 describe("the verification gate catches real breakage", () => {
   test("a dropped declaration is caught", () => {
     const { resolved, ns } = run("flex p-4");

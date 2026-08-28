@@ -2,3 +2,7 @@ node_modules
 dist
 .tw2sx
 codedb.snapshot
+
+# Local research. Kept on disk, never committed.
+CONTEXT.md
+docs/

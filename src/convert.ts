@@ -8,7 +8,7 @@ import { checkStyle, type Mismatch } from "./verify.ts";
  * Turning a list of Tailwind classes into a checked StyleX style, in one place.
  *
  * Every caller used to write these four steps by hand, and they drifted: `plan` counted a
- * usage as converted when `apply` would skip it, which broke ADR-0002's "never partially
+ * usage as converted when `apply` would skip it, which broke the rule that a usage is "never partially
  * converts a usage" for 14% of the sites in a real codebase. The rule now lives here only.
  */
 export type Converted = {
@@ -25,7 +25,7 @@ export type Converted = {
 };
 
 /**
- * ADR-0002: convert only what we can prove. A usage converts when every class resolved,
+ * Convert only what we can prove. A usage converts when every class resolved,
  * nothing was skipped, and the generated StyleX compiles to the same declarations Tailwind
  * produced. Anything less and the caller gets skips instead of a style.
  */

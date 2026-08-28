@@ -240,7 +240,7 @@ const diffIndexes = (styleName: string, expected: DeclIndex, actual: DeclIndex):
 ];
 
 /**
- * ADR-0003: the correctness gate. Compare the declarations Tailwind produced against
+ * The correctness gate. Compare the declarations Tailwind produced against
  * the declarations the generated StyleX actually compiles to.
  */
 export const checkStyle = (name: string, resolved: ResolvedClasses, ns: Style): VerifyResult => {

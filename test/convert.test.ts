@@ -23,7 +23,7 @@ describe("convert decides once what counts as converted", () => {
     expect(out.rules).toBeGreaterThan(0);
   });
 
-  // ADR-0002: a usage converts whole or not at all. `plan` used to report a style here while
+  // A usage converts whole or not at all. `plan` used to report a style here while
   // `apply` skipped it - 899 usages in a real codebase disagreed.
   test("one unconvertible class withholds the whole style", () => {
     const out = run("flex items-center p-4 [&_svg]:size-4");

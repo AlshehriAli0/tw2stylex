@@ -170,7 +170,7 @@ describe("apply refuses everything it cannot rewrite safely", () => {
     expect(fs.readFileSync(file, "utf8")).not.toContain("stylex");
   });
 
-  // ADR-0002 at the file level: a usage converts whole or not at all.
+  // A usage converts whole or not at all.
   test("one bad class in an attribute leaves that whole attribute alone", () => {
     const file = write(
       "partial.tsx",
