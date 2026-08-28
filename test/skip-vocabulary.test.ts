@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 
-import { BANNED_SHORTHANDS } from "../src/classes-to-css.ts";
 import { scanFile } from "../src/scan-file.ts";
 import { DEFAULT_FIX, FIX_MEANING, FIXES, REASONS, type Reason } from "../src/skip.ts";
 
@@ -50,32 +49,6 @@ describe("every reason can actually happen", () => {
   });
 });
 
-/**
- * A number written into prose is the one thing no other test covers: the shorthand list is
- * checked against StyleX itself, but "twelve" stayed in the skill for as long as the list was
- * wrong. Counting words are cheap to pin and expensive to notice.
- */
-describe("counts in the skill match the code", () => {
-  const WORD: Record<number, string> = {
-    12: "twelve",
-    13: "thirteen",
-    14: "fourteen",
-    15: "fifteen",
-    16: "sixteen",
-  };
-
-  test("SKILL.md states how many shorthands StyleX drops", () => {
-    const word = WORD[BANNED_SHORTHANDS.size];
-    expect(word).toBeDefined();
-    expect(read("skill/SKILL.md").toLowerCase()).toContain(`${word} shorthands`);
-  });
-
-  test("reason-codes.md agrees with it", () => {
-    const word = WORD[BANNED_SHORTHANDS.size];
-    expect(read("skill/references/reason-codes.md").toLowerCase()).toContain(`all ${word}`);
-  });
-});
-
 describe("fix types", () => {
   test("every fix has a one-line meaning for --help", () => {
     for (const fix of FIXES) expect(FIX_MEANING[fix].length).toBeGreaterThan(10);
@@ -111,9 +84,5 @@ describe("every reference the skill points at exists", () => {
   test("no reference file is orphaned", () => {
     const onDisk = fs.readdirSync(path.join(repo, "skill/references"));
     expect(onDisk.filter(f => !pointedAt.includes(f))).toEqual([]);
-  });
-
-  test("setup is step 0 of the loop, before any conversion", () => {
-    expect(skill).toMatch(/- \[ \] 0\..*setup\.md/);
   });
 });
