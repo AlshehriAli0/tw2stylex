@@ -3,7 +3,8 @@ name: migrating-tailwind-to-stylex
 description: >-
   Migrates Tailwind v4 to StyleX with the tw2sx CLI and hand-resolves the usages it skips.
   Use when moving a codebase off Tailwind, when StyleX or tw2sx is mentioned, when converting
-  className strings or cva() variant maps, or when working a tw2sx report's skips.
+  className strings or cva() variant maps, when working a tw2sx report's skips, or when
+  installing StyleX and wiring it into a build.
 ---
 
 # Migrating Tailwind to StyleX
@@ -16,6 +17,7 @@ Pixels must not change. A style you cannot convert stays in the file and goes in
 
 ## The loop
 
+- [ ] 0. StyleX installed and proven to render — [setup.md](references/setup.md). Once per project.
 - [ ] 1. `tw2sx plan <path>` — writes a report, edits nothing.
 - [ ] 2. Read `MISMATCHES`. **At 0, continue. Above 0, stop and tell the user** —
       the tool generated StyleX that does not match Tailwind, which is a tw2sx bug.
@@ -84,6 +86,20 @@ its own `<div>`.
 **One styling source per element.** An element spreading `stylex.props()` carries no separate
 `className` or `style` attribute; whichever is written second wins.
 
+**Conditions nest inside a property, never beside one.** A `:hover` or `@media` key at the top
+level of a style object is the single most common StyleX mistake:
+
+```js
+// gone: nothing renders
+button: { ':hover': { backgroundColor: 'blue' } }
+// right
+button: { backgroundColor: { default: 'lightblue', ':hover': 'blue' } }
+```
+
+**Every value in `stylex.create` is a literal or a StyleX token.** An imported plain constant
+(`import { PADDING } from './constants'`) is not statically analysable and the property is
+dropped. Move the value into a `.stylex.ts` `defineVars`/`defineConsts`, or inline it.
+
 **Import `.stylex.ts` files directly.** A barrel re-export loses them to static analysis.
 
 **Keyframes are file-local.** `stylex.keyframes()`, never a raw `@keyframes` string. Share one
@@ -91,17 +107,6 @@ across files by wrapping its name in a `defineVars` token.
 
 Descendant and child selectors are the one loud failure: `{'> *': …}` throws
 `Invalid pseudo or at-rule.` at build time.
-
-## Before the first conversion
-
-**Set `useCSSLayers: false` while Tailwind is still in the build.** Tailwind v4 puts utilities
-in `@layer utilities`, and unlayered CSS beats layered CSS. With layers on, StyleX loses to the
-Tailwind you have not deleted and migrated components keep their old styles. Flip it to `true`
-after the last Tailwind class is gone.
-
-**Prove the plugin is wired.** Style one `<div>`, check its computed styles. Without the build
-integration `stylex.props()` returns nothing and every style vanishes — which looks exactly
-like a bad conversion and is not one.
 
 ## References
 
@@ -114,3 +119,11 @@ Each is one hop. Reach for them by name.
   `passed-in-classes`, `variant-function`, or any component that accepts styling from callers.
 - [tokens.md](references/tokens.md) — `@theme` → StyleX tokens, the `--` variable bridge, dark
   mode. Read it before touching tokens or theming.
+- [setup.md](references/setup.md) — installing StyleX, wiring the build, the CSS entrypoint,
+  `useCSSLayers`, proving it renders. Read it before the first conversion in a project, or when
+  a converted component renders unstyled.
+
+Facebook publishes two files written for agents —
+[authoring](https://raw.githubusercontent.com/facebook/stylex/main/packages/docs/static/llm/stylex-authoring.md)
+and [installation](https://raw.githubusercontent.com/facebook/stylex/main/packages/docs/static/llm/stylex-installation.md).
+Fetch them for any API this skill does not cover, and to check a rule here that looks wrong.

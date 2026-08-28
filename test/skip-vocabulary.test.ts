@@ -99,3 +99,21 @@ describe("variant-function fires on the cva naming convention", () => {
     expect(reasons).toContain("dynamic-classes");
   });
 });
+
+describe("every reference the skill points at exists", () => {
+  const skill = read("skill/SKILL.md");
+  const pointedAt = [...skill.matchAll(/\]\(references\/([a-z-]+\.md)\)/g)].map(m => m[1] ?? "");
+
+  test.each([...new Set(pointedAt)])("references/%s is there", file => {
+    expect(fs.existsSync(path.join(repo, "skill/references", file))).toBe(true);
+  });
+
+  test("no reference file is orphaned", () => {
+    const onDisk = fs.readdirSync(path.join(repo, "skill/references"));
+    expect(onDisk.filter(f => !pointedAt.includes(f))).toEqual([]);
+  });
+
+  test("setup is step 0 of the loop, before any conversion", () => {
+    expect(skill).toMatch(/- \[ \] 0\..*setup\.md/);
+  });
+});
