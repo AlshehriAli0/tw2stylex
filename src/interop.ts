@@ -1,7 +1,7 @@
 /**
  * Several dependencies tw2sx drives (tailwindcss, @stylexjs/babel-plugin, @babel/traverse)
  * ship CommonJS. Node's ESM interop nests their real export under `.default`; Bun hands it
- * over directly. Getting this wrong is silent - you end up passing a module namespace where a
+ * over directly. Getting this wrong is silent - you end up passing the whole module where a
  * function was expected - so every unwrap goes through here.
  */
 

@@ -2,9 +2,9 @@ import { transformSync } from "@babel/core";
 import stylexPluginMod from "@stylexjs/babel-plugin";
 import postcss from "postcss";
 
-import { printCreate, type SxNamespace } from "./emit.ts";
+import { printCreate, type Style } from "./emit.ts";
 import { cjsDefault } from "./interop.ts";
-import type { Resolved } from "./reshape.ts";
+import type { ResolvedClasses } from "./reshape.ts";
 
 const stylexPlugin: unknown =
   typeof stylexPluginMod === "function" ? stylexPluginMod : cjsDefault(stylexPluginMod);
@@ -12,7 +12,7 @@ const stylexPlugin: unknown =
 export type CompiledRule = { className: string; css: string; priority: number };
 
 export type Mismatch = {
-  namespace: string;
+  styleName: string;
   condition: string;
   property: string;
   tailwind: string | undefined;
@@ -25,7 +25,7 @@ export type VerifyResult =
   | { ok: false; kind: "mismatch"; mismatches: Mismatch[]; rules: CompiledRule[] };
 
 /** A group of declarations sharing one condition path. */
-export type DeclGroup = { path: string[]; props: Map<string, string> };
+export type DeclarationGroup = { path: string[]; props: Map<string, string> };
 
 /** condition key -> property -> value */
 type DeclIndex = Map<string, Map<string, string>>;
@@ -87,9 +87,9 @@ const suffixOf = (selector: string): string =>
   selector.replace(/^(\.[A-Za-z0-9_-]+)+/, "").replace(/:not\(#\\?#\)/g, "");
 
 /** Parse StyleX's emitted atomic rules back into condition-path groups. */
-export const declsFromRules = (rules: CompiledRule[]): DeclGroup[] => {
-  const groups: DeclGroup[] = [];
-  const byKey = new Map<string, DeclGroup>();
+export const declsFromRules = (rules: CompiledRule[]): DeclarationGroup[] => {
+  const groups: DeclarationGroup[] = [];
+  const byKey = new Map<string, DeclarationGroup>();
 
   const walk = (node: postcss.Container, path: string[]): void => {
     node.each(child => {
@@ -186,7 +186,7 @@ const kebab = (p: string): string =>
 const identity = (p: string): string => p;
 
 /** Collapse declaration groups into condition -> property -> value, normalising both keys. */
-const indexOf = (groups: DeclGroup[], keyOf: (prop: string) => string): DeclIndex => {
+const indexOf = (groups: DeclarationGroup[], keyOf: (prop: string) => string): DeclIndex => {
   const index: DeclIndex = new Map();
   for (const { path, props } of groups) {
     const cond = normCondition(path);
@@ -204,7 +204,7 @@ const entriesOf = (index: DeclIndex): Array<[cond: string, property: string, val
   );
 
 /** Declarations Tailwind produced that StyleX did not reproduce, value included. */
-const missingOrWrong = (namespace: string, expected: DeclIndex, actual: DeclIndex): Mismatch[] =>
+const missingOrWrong = (styleName: string, expected: DeclIndex, actual: DeclIndex): Mismatch[] =>
   entriesOf(expected)
     .map(([cond, property, want]) => ({
       cond,
@@ -214,7 +214,7 @@ const missingOrWrong = (namespace: string, expected: DeclIndex, actual: DeclInde
     }))
     .filter(({ want, got }) => got === undefined || normValue(got) !== normValue(want))
     .map(({ cond, property, want, got }) => ({
-      namespace,
+      styleName,
       condition: cond || "default",
       property,
       tailwind: want,
@@ -222,11 +222,11 @@ const missingOrWrong = (namespace: string, expected: DeclIndex, actual: DeclInde
     }));
 
 /** Declarations StyleX emitted that Tailwind never asked for. */
-const unexpected = (namespace: string, expected: DeclIndex, actual: DeclIndex): Mismatch[] =>
+const unexpected = (styleName: string, expected: DeclIndex, actual: DeclIndex): Mismatch[] =>
   entriesOf(actual)
     .filter(([cond, property]) => expected.get(cond)?.has(property) !== true)
     .map(([cond, property, got]) => ({
-      namespace,
+      styleName,
       condition: cond || "default",
       property,
       tailwind: undefined,
@@ -234,24 +234,20 @@ const unexpected = (namespace: string, expected: DeclIndex, actual: DeclIndex): 
     }));
 
 /** Every (condition, property) where the two sides disagree, checked in both directions. */
-const diffIndexes = (namespace: string, expected: DeclIndex, actual: DeclIndex): Mismatch[] => [
-  ...missingOrWrong(namespace, expected, actual),
-  ...unexpected(namespace, expected, actual),
+const diffIndexes = (styleName: string, expected: DeclIndex, actual: DeclIndex): Mismatch[] => [
+  ...missingOrWrong(styleName, expected, actual),
+  ...unexpected(styleName, expected, actual),
 ];
 
 /**
  * ADR-0003: the correctness gate. Compare the declarations Tailwind produced against
  * the declarations the generated StyleX actually compiles to.
  */
-export const verifyNamespace = (
-  name: string,
-  resolved: Resolved,
-  ns: SxNamespace,
-): VerifyResult => {
+export const checkStyle = (name: string, resolved: ResolvedClasses, ns: Style): VerifyResult => {
   const compiled = compileStyleX(printCreate({ [name]: ns }));
   if ("error" in compiled) return { ok: false, kind: "compile-error", message: compiled.error };
 
-  const expected = indexOf([...resolved.decls.values()], kebab);
+  const expected = indexOf([...resolved.declarations.values()], kebab);
   const actual = indexOf(declsFromRules(compiled.rules), identity);
   const mismatches = diffIndexes(name, expected, actual);
 

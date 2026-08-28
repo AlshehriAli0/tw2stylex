@@ -1,11 +1,11 @@
 import { describe, expect, test, beforeAll } from "bun:test";
 import path from "node:path";
 
-import { toNamespace, printCreate } from "../src/emit.ts";
+import { toStyle, printCreate } from "../src/emit.ts";
 import { scanFile } from "../src/extract.ts";
-import { resolveElement, selfSelector } from "../src/reshape.ts";
+import { resolveClasses, selfSelector } from "../src/reshape.ts";
 import { loadDesignSystem, type LoadedSystem } from "../src/resolve.ts";
-import { verifyNamespace, compileStyleX } from "../src/verify.ts";
+import { checkStyle, compileStyleX } from "../src/verify.ts";
 
 const FIXTURE = path.join(import.meta.dir, "fixture.css");
 let sys: LoadedSystem;
@@ -14,13 +14,13 @@ beforeAll(async () => {
 });
 
 const run = (classes: string) => {
-  const resolved = resolveElement(sys.ds, classes.split(/\s+/).filter(Boolean));
-  const ns = toNamespace(resolved);
-  return { resolved, ns, verdict: verifyNamespace("t", resolved, ns) };
+  const resolved = resolveClasses(sys.ds, classes.split(/\s+/).filter(Boolean));
+  const ns = toStyle(resolved);
+  return { resolved, ns, verdict: checkStyle("t", resolved, ns) };
 };
 const reasons = (classes: string) =>
   run(classes)
-    .resolved.refusals.map(r => r.reason)
+    .resolved.skips.map(r => r.reason)
     .sort();
 
 describe("the project design system is the source of truth", () => {
@@ -30,7 +30,7 @@ describe("the project design system is the source of truth", () => {
     expect(run("bg-primary").ns.backgroundColor).toBe("rgb(var(--primary))");
   });
   test("a class the design system does not define is refused, not guessed", () => {
-    expect(reasons("bg-not-a-real-token")).toContain("unknown-candidate");
+    expect(reasons("bg-not-a-real-token")).toContain("unknown-class");
   });
 });
 
@@ -83,14 +83,14 @@ describe("--tw-* composition chains resolve to literals", () => {
   });
 });
 
-describe("refusals are typed and complete", () => {
+describe("skips are typed and complete", () => {
   test.each([
     ["[&_svg]:size-4", "descendant-selector"],
-    ["space-y-2", "child-styling-utility"],
-    ["divide-y", "child-styling-utility"],
-    ["group-hover:underline", "sibling-variant"],
-    ["dark:text-white", "ancestor-state"],
-    ["animate-spin", "banned-shorthand"],
+    ["space-y-2", "styles-children"],
+    ["divide-y", "styles-children"],
+    ["group-hover:underline", "sibling-state"],
+    ["dark:text-white", "parent-state"],
+    ["animate-spin", "dropped-shorthand"],
     ["group", "marker-class"],
     ["group/card", "marker-class"],
     ["peer", "marker-class"],
@@ -98,10 +98,11 @@ describe("refusals are typed and complete", () => {
     expect(reasons(cls)).toContain(reason);
   });
 
-  test("every refusal carries an actionable hint", () => {
-    for (const r of run("[&_svg]:size-4 space-y-2 group dark:text-white").resolved.refusals) {
-      expect(r.hint.length).toBeGreaterThan(20);
-      expect(r.detail).toContain(r.candidate!);
+  test("every skip names the class it blames and says what to do", () => {
+    for (const skip of run("[&_svg]:size-4 space-y-2 group dark:text-white").resolved.skips) {
+      expect(skip.hint.length).toBeGreaterThan(20);
+      expect(skip.class).toBeDefined();
+      expect(skip.detail).toContain(String(skip.class));
     }
   });
 });
@@ -132,19 +133,19 @@ describe("the verification gate catches real breakage", () => {
   test("a dropped declaration is caught", () => {
     const { resolved, ns } = run("flex p-4");
     delete ns.padding;
-    const v = verifyNamespace("t", resolved, ns);
+    const v = checkStyle("t", resolved, ns);
     expect(v.ok).toBe(false);
     expect(v.kind === "mismatch" && v.mismatches[0].property).toBe("padding");
   });
   test("a wrong value is caught", () => {
     const { resolved, ns } = run("p-4");
     ns.padding = "calc(var(--spacing) * 8)";
-    expect(verifyNamespace("t", resolved, ns).ok).toBe(false);
+    expect(checkStyle("t", resolved, ns).ok).toBe(false);
   });
   test("condition erasure is caught", () => {
     const { resolved, ns } = run("bg-brand hover:bg-accent");
     ns.backgroundColor = "var(--color-brand)"; // flat override wipes :hover
-    const v = verifyNamespace("t", resolved, ns);
+    const v = checkStyle("t", resolved, ns);
     expect(v.ok).toBe(false);
     expect(v.kind === "mismatch" && v.mismatches.some(m => m.condition.includes(":hover"))).toBe(
       true,
@@ -168,7 +169,7 @@ describe("the verification gate catches real breakage", () => {
   });
 });
 
-describe("extraction finds sites and names them", () => {
+describe("extraction finds usages and names them", () => {
   const src = `
     import { cva } from 'class-variance-authority';
     const v = cva("flex p-4", { variants: { size: { sm: "p-1", lg: "p-8" } } });
@@ -176,14 +177,14 @@ describe("extraction finds sites and names them", () => {
     export const D = () => <span className="text-sm" />;
   `;
   const scan = scanFile(src, "x.tsx");
-  test("finds cva base, each variant value, and jsx sites", () => {
-    expect(scan.sites.filter(s => s.kind === "cva-base")).toHaveLength(1);
-    expect(scan.sites.filter(s => s.kind === "cva-variant")).toHaveLength(2);
-    expect(scan.sites.some(s => s.candidates.includes("text-sm"))).toBe(true);
+  test("finds cva base, each variant value, and jsx usages", () => {
+    expect(scan.usages.filter(s => s.kind === "cva-base")).toHaveLength(1);
+    expect(scan.usages.filter(s => s.kind === "cva-variant")).toHaveLength(2);
+    expect(scan.usages.some(s => s.classNames.includes("text-sm"))).toBe(true);
   });
-  test("a className prop flowing in is a contract-change refusal", () => {
-    const all = scan.sites.flatMap(s => s.refusals);
-    expect(all.some(r => r.reason === "contract-change")).toBe(true);
+  test("a className prop flowing in is a passed-in-classes skip", () => {
+    const all = scan.usages.flatMap(s => s.skips);
+    expect(all.some(r => r.reason === "passed-in-classes")).toBe(true);
   });
 });
 

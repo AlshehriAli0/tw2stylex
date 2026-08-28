@@ -1,97 +1,56 @@
 import fs from "node:fs";
-import path from "node:path";
 
-import { toNamespace, printCreate, type SxNamespace } from "./emit.ts";
-import { scanFile, type Site } from "./extract.ts";
-import { toFinding, type FileResult, type Report } from "./report.ts";
-import { resolveElement } from "./reshape.ts";
+import { convert } from "./convert.ts";
+import { printCreate, type Style } from "./emit.ts";
+import { scanFile } from "./extract.ts";
+import { toSkipLine, type FileResult, type Report } from "./report.ts";
 import { loadDesignSystem, type LoadedSystem } from "./resolve.ts";
-import { verifyNamespace } from "./verify.ts";
+import { styleNameFor } from "./style-name.ts";
 
-const camelise = (s: string): string =>
-  s.replace(/[^A-Za-z0-9]+(.)/g, (_m, c: string) => c.toUpperCase()).replace(/[^A-Za-z0-9]/g, "");
-
-const baseName = (site: Site, index: number): string => {
-  if (site.kind === "cva-base") return "base";
-  if (site.kind === "cva-variant") return camelise(`${site.variantAxis}-${site.variantValue}`);
-  return `el${index + 1}`;
-};
-
-/** Name a namespace after where it came from, never `$1`/`$2`. */
-export const namespaceName = (site: Site, index: number, used: Set<string>): string => {
-  const base = baseName(site, index);
-  let name = base;
-  let n = 2;
-  while (used.has(name)) {
-    name = `${base}${n}`;
-    n += 1;
-  }
-  used.add(name);
-  return name;
-};
-
-const verdictFor = (total: number, converted: number, refused: number): FileResult["verdict"] => {
+const verdictFor = (total: number, converted: number, skipped: number): FileResult["verdict"] => {
   if (total === 0) return "unchanged";
-  if (refused === 0) return "converted";
-  if (converted === 0) return "refused";
+  if (skipped === 0) return "converted";
+  if (converted === 0) return "skipped";
   return "partial";
 };
 
+/**
+ * Convert one file's usages. Every decision about what counts as converted lives in
+ * `convert()`, so `plan` and `apply` cannot drift apart on it.
+ */
 export const processFile = (sys: LoadedSystem, file: string): FileResult => {
-  const code = fs.readFileSync(file, "utf8");
-  const { sites } = scanFile(code, file);
-  const findings: FileResult["findings"] = [];
+  const { usages } = scanFile(fs.readFileSync(file, "utf8"), file);
+  const lines: FileResult["skips"] = [];
   const mismatches: FileResult["mismatches"] = [];
-  const namespaces: Record<string, SxNamespace> = {};
+  const styles: Record<string, Style> = {};
   const used = new Set<string>();
   let converted = 0;
 
-  sites.forEach((site, i) => {
-    for (const r of site.refusals)
-      findings.push(toFinding(file, site.loc.line, site.loc.column, r));
-    if (!site.candidates.length) return;
+  usages.forEach((usage, i) => {
+    const name = styleNameFor(usage, i, used);
+    const result = convert(sys.ds, name, usage.classNames);
+    const skips = [...usage.skips, ...result.skips];
 
-    const resolved = resolveElement(sys.ds, site.candidates);
-    for (const r of resolved.refusals)
-      findings.push(toFinding(file, site.loc.line, site.loc.column, r));
+    for (const skip of skips) lines.push(toSkipLine(file, usage.loc.line, usage.loc.column, skip));
+    mismatches.push(...result.mismatches);
 
-    if (!resolved.decls.size) return;
-    const name = namespaceName(site, i, used);
-    const ns = toNamespace(resolved);
-    const v = verifyNamespace(name, resolved, ns);
-    if (v.ok) {
-      namespaces[name] = ns;
-      converted++;
-    } else if (v.kind === "compile-error") {
-      findings.push(
-        toFinding(file, site.loc.line, site.loc.column, {
-          reason: "banned-shorthand",
-          detail: `Generated StyleX does not compile: ${v.message.split("\n").pop()?.trim()}`,
-          hint: "This is a tw2sx bug or an unsupported utility; convert this site by hand.",
-        }),
-      );
-    } else {
-      mismatches.push(...v.mismatches);
-      findings.push(
-        toFinding(file, site.loc.line, site.loc.column, {
-          reason: "condition-erasure",
-          detail: `Generated StyleX declarations differ from Tailwind's in ${v.mismatches.length} place(s).`,
-          hint: "See the mismatches array in the JSON report; convert this site by hand.",
-        }),
-      );
+    // A usage converts only when nothing about it was skipped - what `apply` will also do.
+    if (skips.length === 0 && result.style) {
+      styles[name] = result.style;
+      converted += 1;
     }
   });
 
-  const total = sites.length;
-  const refused = total - converted;
+  const total = usages.length;
+  const skipped = total - converted;
   return {
     file,
-    verdict: verdictFor(total, converted, refused),
-    sites: total,
+    verdict: verdictFor(total, converted, skipped),
+    usages: total,
     converted,
-    refused,
-    source: Object.keys(namespaces).length ? printCreate(namespaces) : undefined,
-    findings,
+    skipped,
+    source: Object.keys(styles).length > 0 ? printCreate(styles) : undefined,
+    skips: lines,
     mismatches,
   };
 };
@@ -99,15 +58,18 @@ export const processFile = (sys: LoadedSystem, file: string): FileResult => {
 export const plan = async (entryCss: string, files: string[]): Promise<Report> => {
   const sys = await loadDesignSystem(entryCss);
   const results = files.map(f => processFile(sys, f));
+
   const byReason: Record<string, number> = {};
-  const byApplicability: Record<string, number> = {};
-  for (const r of results)
-    for (const f of r.findings) {
-      byReason[f.reason] = (byReason[f.reason] ?? 0) + 1;
-      byApplicability[f.applicability] = (byApplicability[f.applicability] ?? 0) + 1;
+  const byFix: Record<string, number> = {};
+  for (const result of results)
+    for (const skip of result.skips) {
+      byReason[skip.reason] = (byReason[skip.reason] ?? 0) + 1;
+      byFix[skip.fix] = (byFix[skip.fix] ?? 0) + 1;
     }
-  const sum = (k: "sites" | "converted" | "refused"): number =>
+
+  const sum = (k: "usages" | "converted" | "skipped"): number =>
     results.reduce((a, r) => a + r[k], 0);
+
   return {
     ok: results.every(r => r.mismatches.length === 0),
     tool: "tw2sx",
@@ -115,59 +77,12 @@ export const plan = async (entryCss: string, files: string[]): Promise<Report> =
     entry: sys.entry,
     summary: {
       files: results.length,
-      sites: sum("sites"),
+      usages: sum("usages"),
       converted: sum("converted"),
-      refused: sum("refused"),
+      skipped: sum("skipped"),
       byReason,
-      byApplicability,
+      byFix,
     },
     files: results,
   };
-};
-
-/** Find the project's Tailwind entry CSS by looking for an @import "tailwindcss". */
-export const findEntryCss = (from: string): string | undefined => {
-  const roots = [from, ...ancestors(from)];
-  for (const dir of roots) {
-    for (const rel of [
-      "src/index.css",
-      "src/app.css",
-      "src/styles/globals.css",
-      "app/globals.css",
-      "styles/globals.css",
-      "index.css",
-    ]) {
-      const f = path.join(dir, rel);
-      if (fs.existsSync(f) && /@import\s+["']tailwindcss/.test(fs.readFileSync(f, "utf8")))
-        return f;
-    }
-  }
-  return undefined;
-};
-
-const ancestors = (dir: string): string[] => {
-  const out: string[] = [];
-  let cur = path.resolve(dir);
-  for (let i = 0; i < 8; i++) {
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    out.push(next);
-    cur = next;
-  }
-  return out;
-};
-
-const SOURCE_FILE = /\.(?:tsx|jsx|ts|js)$/;
-
-export const collectFiles = (target: string): string[] => {
-  const st = fs.statSync(target);
-  if (st.isFile()) return [target];
-  const out: string[] = [];
-  for (const e of fs.readdirSync(target, { withFileTypes: true })) {
-    if (e.name === "node_modules" || e.name.startsWith(".")) continue;
-    const p = path.join(target, e.name);
-    if (e.isDirectory()) out.push(...collectFiles(p));
-    else if (SOURCE_FILE.test(e.name) && !e.name.endsWith(".d.ts")) out.push(p);
-  }
-  return out;
 };

@@ -4,40 +4,33 @@ import path from "node:path";
 
 import { applyFile, dirtyFiles, type ApplyFileResult } from "./apply.ts";
 import { flagBare, flagNumber, flagPresent, flagString, positionalAt, type Args } from "./args.ts";
-import { printCreate, toNamespace } from "./emit.ts";
+import { convert } from "./convert.ts";
+import { EXIT, fail, type Failure } from "./exit.ts";
+import { collectFiles, findEntryCss } from "./find-files.ts";
 import { isRecord } from "./interop.ts";
-import { collectFiles, findEntryCss, plan } from "./pipeline.ts";
-import {
-  EXIT,
-  fail,
-  renderAgent,
-  type ErrorEnvelope,
-  type Finding,
-  type Report,
-} from "./report.ts";
-import { resolveElement } from "./reshape.ts";
+import { plan } from "./pipeline.ts";
+import { renderReport, toSkipLine, type Report, type SkipLine } from "./report.ts";
 import { loadDesignSystem } from "./resolve.ts";
-import { verifyNamespace } from "./verify.ts";
 
 /** Every command returns an exit code or an error envelope; nothing calls process.exit itself. */
-export type CommandResult = { exit: number } | ErrorEnvelope;
+export type CommandResult = { exit: number } | Failure;
 
 /**
  * `code` is the discriminator, not `ok` - a Report carries an `ok` field too, so testing
  * that would classify a perfectly good report as a failure.
  */
-const isError = (r: object): r is ErrorEnvelope => "code" in r && typeof r.code === "string";
+const isError = (r: object): r is Failure => "code" in r && typeof r.code === "string";
 
-export const FINDING_FIELDS = [
+export const SKIP_FIELDS = [
   "file",
   "line",
   "column",
   "reason",
-  "applicability",
-  "candidate",
+  "fix",
+  "class",
   "detail",
   "hint",
-  "rendered",
+  "message",
 ];
 
 type Output = { json: boolean; fields: string[] | undefined; limit: number };
@@ -55,7 +48,7 @@ const emit = (value: unknown): void => {
   console.log(JSON.stringify(value, null, 2));
 };
 
-const project = (finding: Finding, fields: string[] | undefined): Record<string, unknown> => {
+const project = (finding: SkipLine, fields: string[] | undefined): Record<string, unknown> => {
   if (!fields?.length) return { ...finding };
   const out: Record<string, unknown> = {};
   const bag: Record<string, unknown> = { ...finding };
@@ -67,7 +60,7 @@ const project = (finding: Finding, fields: string[] | undefined): Record<string,
 const containingDir = (target: string): string =>
   fs.statSync(target).isDirectory() ? target : path.dirname(target);
 
-const entryCssFor = (args: Args, from: string, retry: string): string | ErrorEnvelope => {
+const entryCssFor = (args: Args, from: string, retry: string): string | Failure => {
   const explicit = flagString(args, "css");
   if (explicit !== undefined) return explicit;
   const found = findEntryCss(from);
@@ -80,7 +73,7 @@ const entryCssFor = (args: Args, from: string, retry: string): string | ErrorEnv
   );
 };
 
-const requireExistingPath = (target: string | undefined, usage: string): string | ErrorEnvelope => {
+const requireExistingPath = (target: string | undefined, usage: string): string | Failure => {
   if (target === undefined) return fail("E_NO_INPUT", EXIT.USAGE, "No path given.", usage);
   if (!fs.existsSync(target))
     return fail("E_NO_SUCH_PATH", EXIT.USAGE, `Path not found: ${target}`, usage);
@@ -104,38 +97,34 @@ export const explainCommand = async (args: Args, out: Output): Promise<CommandRe
   if (typeof css !== "string") return css;
 
   const sys = await loadDesignSystem(css);
-  const resolved = resolveElement(sys.ds, classes);
-  const ns = toNamespace(resolved);
-  const verdict = verifyNamespace("styles", resolved, ns);
-  const source = printCreate({ styles: ns });
+  const result = convert(sys.ds, "styles", classes);
+  // No file to point at, so column 0 marks "this came from the command line".
+  const skips = result.skips.map(s => toSkipLine("<argv>", 0, 0, s));
 
   if (out.json) {
     emit({
-      ok: verdict.ok,
+      ok: result.skips.length === 0,
       entry: sys.entry,
       tailwind: sys.version,
-      stylex: ns,
-      source,
-      refusals: resolved.refusals,
+      stylex: result.style,
+      source: result.source,
+      skipped: skips,
     });
   } else {
-    console.log(source);
-    if (resolved.refusals.length > 0) {
-      console.log("");
-      for (const r of resolved.refusals) {
-        const named = r.candidate === undefined ? "" : ` "${r.candidate}"`;
-        console.log(`refused ${r.reason}${named}: ${r.detail}\n  help: ${r.hint}`);
-      }
-    }
+    if (result.source !== undefined) console.log(result.source);
+    for (const skip of skips)
+      console.log(
+        `skipped ${skip.reason}${skip.class === undefined ? "" : ` "${skip.class}"`}: ${skip.detail}\n  fix: ${skip.hint}`,
+      );
     console.log("");
     console.log(
-      verdict.ok
-        ? `verified: declarations match Tailwind (${verdict.rules.length} atomic rules)`
-        : `NOT VERIFIED: ${verdict.kind}`,
+      result.style
+        ? `checked: same declarations as Tailwind (${result.rules} atomic rules)`
+        : `not converted: ${skips.length} skipped`,
     );
   }
 
-  return { exit: resolved.refusals.length > 0 ? EXIT.REFUSALS : EXIT.CLEAN };
+  return { exit: skips.length > 0 ? EXIT.SKIPPED : EXIT.CLEAN };
 };
 
 const summarise = (report: Report, fields: string[] | undefined): unknown => ({
@@ -147,16 +136,16 @@ const summarise = (report: Report, fields: string[] | undefined): unknown => ({
   files: report.files.map(f => ({
     file: f.file,
     verdict: f.verdict,
-    sites: f.sites,
+    usages: f.usages,
     converted: f.converted,
-    refused: f.refused,
-    findings: f.findings.map(x => project(x, fields)),
+    skipped: f.skipped,
+    skips: f.skips.map(x => project(x, fields)),
   })),
 });
 
 const planExit = (report: Report): number => {
   if (!report.ok) return EXIT.INTERNAL;
-  return report.summary.refused > 0 ? EXIT.REFUSALS : EXIT.CLEAN;
+  return report.summary.skipped > 0 ? EXIT.SKIPPED : EXIT.CLEAN;
 };
 
 export const planCommand = async (args: Args, out: Output): Promise<CommandResult> => {
@@ -175,12 +164,12 @@ export const planCommand = async (args: Args, out: Output): Promise<CommandResul
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
 
   if (out.json) emit(summarise(report, out.fields));
-  else console.log(renderAgent(report, out.limit, reportPath));
+  else console.log(renderReport(report, out.limit, reportPath));
 
   return { exit: planExit(report) };
 };
 
-const dirtyGuard = (target: string): ErrorEnvelope | undefined => {
+const dirtyGuard = (target: string): Failure | undefined => {
   const dirty = dirtyFiles(path.resolve(containingDir(target)));
   if (!dirty || dirty.length === 0) return undefined;
   return fail(
@@ -215,7 +204,7 @@ type ApplyPrint = {
 const printApply = ({ touched, write, rewritten, skipped, target, limit }: ApplyPrint): void => {
   const mode = write ? "" : "  (DRY RUN - pass --write to edit)";
   console.log(
-    `${touched.length} files · ${rewritten} sites rewritten · ${skipped} left for you${mode}`,
+    `${touched.length} files · ${rewritten} usages rewritten · ${skipped} left for you${mode}`,
   );
   for (const r of touched.slice(0, limit))
     console.log(`  ${r.file}: ${r.rewritten} rewritten, ${r.skipped} skipped`);
@@ -245,7 +234,7 @@ export const applyCommand = async (args: Args, out: Output): Promise<CommandResu
   if (out.json) emit(applyJson(touched, write, rewritten, skipped));
   else printApply({ touched, write, rewritten, skipped, target, limit: out.limit });
 
-  return { exit: skipped > 0 ? EXIT.REFUSALS : EXIT.CLEAN };
+  return { exit: skipped > 0 ? EXIT.SKIPPED : EXIT.CLEAN };
 };
 
 const isReport = (v: unknown): v is Report => isRecord(v) && Array.isArray(v.files);
@@ -255,17 +244,17 @@ const readReport = (file: string): Report | undefined => {
   return isReport(parsed) ? parsed : undefined;
 };
 
-const filterFindings = (report: Report, args: Args): Finding[] => {
+const filterSkips = (report: Report, args: Args): SkipLine[] => {
   const reason = flagString(args, "reason");
-  const applicability = flagString(args, "applicability");
+  const fix = flagString(args, "fix");
   return report.files
-    .flatMap(f => f.findings)
+    .flatMap(f => f.skips)
     .filter(f => reason === undefined || f.reason === reason)
-    .filter(f => applicability === undefined || f.applicability === applicability);
+    .filter(f => fix === undefined || f.fix === fix);
 };
 
 /** Load the report named by the first positional, or say precisely why we could not. */
-const openReport = (args: Args): Report | ErrorEnvelope => {
+const openReport = (args: Args): Report | Failure => {
   const file = positionalAt(args, 1);
   if (file === undefined || !fs.existsSync(file))
     return fail(
@@ -287,29 +276,28 @@ const openReport = (args: Args): Report | ErrorEnvelope => {
   return report;
 };
 
-const printRefusals = (findings: Finding[], shown: Finding[]): void => {
-  for (const f of shown) console.log(f.rendered);
-  if (findings.length > shown.length)
-    console.log(`\nShowing ${shown.length} of ${findings.length}.`);
+const printSkips = (skips: SkipLine[], shown: SkipLine[]): void => {
+  for (const f of shown) console.log(f.message);
+  if (skips.length > shown.length) console.log(`\nShowing ${shown.length} of ${skips.length}.`);
 };
 
-export const refusalsCommand = (args: Args, out: Output): CommandResult => {
+export const skippedCommand = (args: Args, out: Output): CommandResult => {
   // Bare `--json` with no value lists the field names (the `gh` pattern).
   if (flagBare(args, "json")) {
-    console.log(FINDING_FIELDS.join("\n"));
+    console.log(SKIP_FIELDS.join("\n"));
     return { exit: EXIT.CLEAN };
   }
 
   const report = openReport(args);
   if (isError(report)) return report;
 
-  const findings = filterFindings(report, args);
-  const shown = findings.slice(0, out.limit);
+  const skips = filterSkips(report, args);
+  const shown = skips.slice(0, out.limit);
 
   if (out.json) emit(shown.map(f => project(f, out.fields)));
-  else printRefusals(findings, shown);
+  else printSkips(skips, shown);
 
-  return { exit: findings.length > 0 ? EXIT.REFUSALS : EXIT.CLEAN };
+  return { exit: skips.length > 0 ? EXIT.SKIPPED : EXIT.CLEAN };
 };
 
 export { isError };

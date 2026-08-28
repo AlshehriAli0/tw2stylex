@@ -5,12 +5,11 @@ import path from "node:path";
 
 import MagicString from "magic-string";
 
-import { toNamespace, printCreate, type SxNamespace } from "./emit.ts";
-import { scanFile, type Site } from "./extract.ts";
-import { namespaceName } from "./pipeline.ts";
-import { resolveElement } from "./reshape.ts";
+import { convert } from "./convert.ts";
+import { printCreate, type Style } from "./emit.ts";
+import { scanFile, type Usage } from "./extract.ts";
 import type { LoadedSystem } from "./resolve.ts";
-import { verifyNamespace } from "./verify.ts";
+import { styleNameFor } from "./style-name.ts";
 
 export type ApplyFileResult = {
   file: string;
@@ -38,14 +37,14 @@ export const dirtyFiles = (dir: string): string[] | null => {
 };
 
 /**
- * The byte range to overwrite, when this site is safe to rewrite in place: no refusals,
- * static classes, and a host element that can actually receive a props spread.
+ * The byte range to overwrite, when this usage is safe to rewrite in place: nothing skipped,
+ * static classes, and an HTML element that can actually receive a props spread.
  */
-const rewritableRange = (site: Site): [number, number] | undefined => {
-  if (site.refusals.length > 0 || site.candidates.length === 0) return undefined;
-  if (site.hostElement !== true) return undefined;
-  if (site.kind !== "literal" && site.kind !== "cn-call") return undefined;
-  return site.range;
+const rewritableRange = (usage: Usage): [number, number] | undefined => {
+  if (usage.skips.length > 0 || usage.classNames.length === 0) return undefined;
+  if (usage.hostElement !== true) return undefined;
+  if (usage.kind !== "literal" && usage.kind !== "cn-call") return undefined;
+  return usage.range;
 };
 
 /** Write via a temp file in the same directory, then rename. Never leave a half-written file. */
@@ -60,51 +59,45 @@ const atomicWrite = (file: string, content: string): void => {
  * `stylex.props(...)` spread, and append the `stylex.create` call.
  *
  * All-or-nothing per file: if anything throws, the file is left untouched.
- * A site is only rewritten when it has zero refusals AND it verified.
+ * Whether a usage converts is `convert()`'s decision, the same one `plan` reports.
  */
 export const applyFile = (sys: LoadedSystem, file: string, write: boolean): ApplyFileResult => {
   const code = fs.readFileSync(file, "utf8");
-  const { sites, hasStyleX } = scanFile(code, file);
+  const { usages, hasStyleX } = scanFile(code, file);
 
   // Already migrated: leave it alone so repeated runs are free and silent.
   if (hasStyleX)
-    return { file, written: false, rewritten: 0, skipped: sites.length, reason: "already-stylex" };
+    return { file, written: false, rewritten: 0, skipped: usages.length, reason: "already-stylex" };
 
-  const s = new MagicString(code);
-  const namespaces: Record<string, SxNamespace> = {};
+  const edits = new MagicString(code);
+  const styles: Record<string, Style> = {};
   const used = new Set<string>();
   let rewritten = 0;
   let skipped = 0;
 
-  sites.forEach((site, i) => {
-    // Only a clean JSX attribute on a host element can take a props spread safely.
-    const range = rewritableRange(site);
-    if (!range) {
-      skipped++;
+  usages.forEach((usage, i) => {
+    // The style name must match what `plan` reported, so every usage takes a number.
+    const name = styleNameFor(usage, i, used);
+
+    // Only a plain JSX attribute on an HTML element can take a props spread safely.
+    const range = rewritableRange(usage);
+    const result = range ? convert(sys.ds, name, usage.classNames) : undefined;
+
+    if (!range || !result?.style) {
+      skipped += 1;
       return;
     }
-    const resolved = resolveElement(sys.ds, site.candidates);
-    if (resolved.refusals.length || !resolved.decls.size) {
-      skipped++;
-      return;
-    }
-    const name = namespaceName(site, i, used);
-    const ns = toNamespace(resolved);
-    if (!verifyNamespace(name, resolved, ns).ok) {
-      skipped++;
-      return;
-    }
-    namespaces[name] = ns;
-    s.update(range[0], range[1], `{...stylex.props(styles.${name})}`);
-    rewritten++;
+    styles[name] = result.style;
+    edits.update(range[0], range[1], `{...stylex.props(styles.${name})}`);
+    rewritten += 1;
   });
 
   if (!rewritten)
     return { file, written: false, rewritten: 0, skipped, reason: "nothing-convertible" };
 
-  s.prepend(`import * as stylex from '@stylexjs/stylex';\n`);
-  s.append(`\n\n${printCreate(namespaces)}\n`);
-  const next = s.toString();
+  edits.prepend(`import * as stylex from '@stylexjs/stylex';\n`);
+  edits.append(`\n\n${printCreate(styles)}\n`);
+  const next = edits.toString();
 
   if (write) atomicWrite(file, next);
   return { file, written: write, rewritten, skipped, diff: write ? undefined : next };

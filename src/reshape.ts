@@ -1,73 +1,24 @@
 import postcss, { type AtRule, type Rule } from "postcss";
 
 import type { DesignSystem } from "./resolve.ts";
-
-/** Why a Site or Candidate could not be converted. Closed enum: the skill has one section per code. */
-export const REASONS = [
-  "unknown-candidate", // Tailwind itself does not recognise the class
-  "marker-class", // `group`/`peer`/`group//name` - becomes a StyleX Marker
-  "descendant-selector", // [&_svg]:, [&>*]: - StyleX hard-errors on these
-  "ancestor-state", // dark:, in-* - depends on an ancestor matching
-  "sibling-variant", // group-*/peer-* - needs a Marker on another element
-  "child-styling-utility", // space-x-*, divide-* - style children, not self
-  "banned-shorthand", // background/border/animation - StyleX drops these silently
-  "unresolved-tw-var", // a --tw-* slot with no value and no @property initial-value
-  "unsupported-at-rule", // @starting-style and friends
-  "dynamic-expression", // className built at runtime
-  "cva-call",
-  "contract-change",
-  "condition-erasure",
-  "conflicting-props", // element also carries a style/className attr alongside the spread
-] as const;
-export type Reason = (typeof REASONS)[number];
-
-/**
- * What the agent should DO about a refusal - orthogonal to why it happened.
- * Mirrors rustc's suggestion_applicability.
- */
-export type Applicability =
-  | "machine-applicable"
-  | "maybe-incorrect"
-  | "has-placeholders"
-  | "unspecified";
-
-/** Default action-class per reason. A Refusal may override it. */
-export const APPLICABILITY: Record<Reason, Applicability> = {
-  "unknown-candidate": "unspecified",
-  "marker-class": "machine-applicable",
-  "descendant-selector": "has-placeholders",
-  "ancestor-state": "has-placeholders",
-  "sibling-variant": "has-placeholders",
-  "child-styling-utility": "maybe-incorrect",
-  "banned-shorthand": "machine-applicable",
-  "unresolved-tw-var": "maybe-incorrect",
-  "unsupported-at-rule": "has-placeholders",
-  "dynamic-expression": "maybe-incorrect",
-  "cva-call": "machine-applicable",
-  "contract-change": "maybe-incorrect",
-  "condition-erasure": "maybe-incorrect",
-  "conflicting-props": "maybe-incorrect",
-};
-
-export type Refusal = {
-  reason: Reason;
-  candidate?: string;
-  detail: string;
-  hint: string;
-  applicability?: Applicability;
-};
+import { newSkips, type Skip, type Skips } from "./skip.ts";
 
 /** An ordered condition path, outermost first: ['@media (hover: hover)', ':hover'] */
-export type CondPath = string[];
-const KEY = (p: CondPath): string => p.join(" ");
+export type ConditionPath = string[];
+const KEY = (p: ConditionPath): string => p.join(" ");
 
-export type Resolved = {
+export type ResolvedClasses = {
   /** condition key -> { path, property -> value }, filled in application order (later wins). */
-  decls: Map<string, { path: CondPath; props: Map<string, string> }>;
-  refusals: Refusal[];
+  declarations: Map<string, { path: ConditionPath; props: Map<string, string> }>;
+  skips: Skip[];
 };
 
-const BANNED_SHORTHANDS = new Set([
+/**
+ * Shorthands StyleX refuses to compile. `test/stylex-limits.test.ts` compiles every entry and
+ * fails if StyleX's real answer ever disagrees, so this list cannot silently go stale - it
+ * already had, missing the two block-direction borders.
+ */
+export const BANNED_SHORTHANDS = new Set([
   "all",
   "animation",
   "background",
@@ -80,6 +31,8 @@ const BANNED_SHORTHANDS = new Set([
   "border-left",
   "border-inline-start",
   "border-inline-end",
+  "border-block-start",
+  "border-block-end",
 ]);
 
 /** The longhand set to write in place of each banned shorthand. */
@@ -97,6 +50,9 @@ const LONGHANDS_FOR: Record<string, string> = {
   "border-inline-start":
     "Write borderInlineStartWidth, borderInlineStartStyle and borderInlineStartColor.",
   "border-inline-end": "Write borderInlineEndWidth, borderInlineEndStyle and borderInlineEndColor.",
+  "border-block-start":
+    "Write borderBlockStartWidth, borderBlockStartStyle and borderBlockStartColor.",
+  "border-block-end": "Write borderBlockEndWidth, borderBlockEndStyle and borderBlockEndColor.",
   all: "Set each property this utility touches explicitly.",
 };
 
@@ -226,21 +182,6 @@ const tidyList = (value: string): string => {
   return parts.length > 0 ? parts.join(", ") : "none";
 };
 
-/** Collects refusals, dropping repeats - one cause often surfaces from several rules. */
-type Refusals = { list: Refusal[]; add: (r: Refusal) => void };
-
-const makeRefusals = (): Refusals => {
-  const seen = new Set<string>();
-  const list: Refusal[] = [];
-  const add = (r: Refusal): void => {
-    const k = `${r.reason}|${r.candidate}|${r.detail}`;
-    if (seen.has(k)) return;
-    seen.add(k);
-    list.push(r);
-  };
-  return { list, add };
-};
-
 const MARKER = /^(group|peer)(\/[\w-]+)?$/;
 
 const markerHint = (named: string | undefined): string =>
@@ -248,33 +189,33 @@ const markerHint = (named: string | undefined): string =>
     ? `Spread stylex.props(stylex.defaultMarker()) on this element; reacting elements use stylex.when.ancestor(':hover').`
     : `Export \`const ${named}Marker = stylex.defineMarker();\` from a .stylex.ts file and spread stylex.props(${named}Marker) here; reacting elements use stylex.when.ancestor(':hover', ${named}Marker).`;
 
-/** Why Tailwind returned no CSS for this candidate. */
-const unresolvedCandidate = (candidate: string): Refusal => {
-  const marker = MARKER.exec(candidate);
+/** Why Tailwind returned no CSS for this className. */
+const whyUnresolved = (className: string): Skip => {
+  const marker = MARKER.exec(className);
   if (marker) {
     return {
       reason: "marker-class",
-      candidate,
-      detail: `"${candidate}" marks this element so descendants or siblings can react to its state.`,
+      class: className,
+      detail: `"${className}" marks this element so descendants or siblings can react to its state.`,
       hint: markerHint(marker[2]?.slice(1)),
     };
   }
   return {
-    reason: "unknown-candidate",
-    candidate,
-    detail: `Tailwind does not recognise "${candidate}" in this project's design system.`,
+    reason: "unknown-class",
+    class: className,
+    detail: `Tailwind does not recognise "${className}" in this project's design system.`,
     hint: "Check for a typo, a missing @plugin, or a class defined in plain CSS (which needs no migration).",
   };
 };
 
-/** The candidates Tailwind knows, in its own emission order: the last one wins. */
-const orderedKnown = (ds: DesignSystem, candidates: string[], refusals: Refusals): string[] => {
+/** The classNames Tailwind knows, in its own emission order: the last one wins. */
+const orderedKnown = (ds: DesignSystem, classNames: string[], skips: Skips): string[] => {
   const ranked: Array<[string, bigint]> = [];
-  for (const [candidate, rank] of ds.getClassOrder(candidates)) {
-    if (rank === null) refusals.add(unresolvedCandidate(candidate));
-    else ranked.push([candidate, rank]);
+  for (const [className, rank] of ds.getClassOrder(classNames)) {
+    if (rank === null) skips.add(whyUnresolved(className));
+    else ranked.push([className, rank]);
   }
-  return ranked.sort((a, b) => (a[1] < b[1] ? -1 : 1)).map(([candidate]) => candidate);
+  return ranked.sort((a, b) => (a[1] < b[1] ? -1 : 1)).map(([className]) => className);
 };
 
 /**
@@ -303,15 +244,32 @@ const COMPOSED_PROPERTY = /shadow|filter|transition|transform/;
 
 /** Writes one resolved declaration, or refuses it. */
 const makeWriter =
-  (decls: Resolved["decls"], twVars: Map<string, string>, refusals: Refusals) =>
-  (path: CondPath, prop: string, rawValue: string, candidate: string): void => {
+  (declarations: ResolvedClasses["declarations"], twVars: Map<string, string>, skips: Skips) =>
+  (path: ConditionPath, decl: postcss.Declaration, className: string): void => {
+    const { prop, value: rawValue } = decl;
     if (prop.startsWith("--tw-")) return; // internal plumbing, never emitted
 
+    /**
+     * StyleX has no importance: it wins by specificity and argument order instead. postcss
+     * parses `!important` into a flag rather than the value, so neither our side nor StyleX's
+     * would see it and the gate compared equal - `p-4!` converted to a plain `padding` and
+     * quietly stopped beating whatever it was written to beat.
+     */
+    if (decl.important) {
+      skips.add({
+        reason: "important-modifier",
+        class: className,
+        detail: `"${className}" emits "${prop}: ${rawValue} !important", and StyleX has no !important.`,
+        hint: "Find the rule this was written to beat. Once that rule is gone, drop the `!` and convert normally; StyleX resolves conflicts by stylex.props() argument order.",
+      });
+      return;
+    }
+
     if (BANNED_SHORTHANDS.has(prop)) {
-      refusals.add({
-        reason: "banned-shorthand",
-        candidate,
-        detail: `"${candidate}" emits the "${prop}" shorthand, which StyleX drops silently.`,
+      skips.add({
+        reason: "dropped-shorthand",
+        class: className,
+        detail: `"${className}" emits the "${prop}" shorthand, which StyleX drops silently.`,
         hint: LONGHANDS_FOR[prop] ?? `Write the longhands of "${prop}" instead.`,
       });
       return;
@@ -319,10 +277,10 @@ const makeWriter =
 
     const expanded = expandTwVars(rawValue, twVars).trim();
     if (expanded.includes("var(--tw-")) {
-      refusals.add({
-        reason: "unresolved-tw-var",
-        candidate,
-        detail: `"${candidate}" leaves an unresolved Tailwind slot in "${prop}: ${expanded}".`,
+      skips.add({
+        reason: "unresolved-variable",
+        class: className,
+        detail: `"${className}" leaves an unresolved Tailwind slot in "${prop}: ${expanded}".`,
         hint: "Set this property to a literal value, or keep the utility in plain CSS.",
       });
       return;
@@ -330,96 +288,104 @@ const makeWriter =
 
     const value =
       expanded.includes(",") && COMPOSED_PROPERTY.test(prop) ? tidyList(expanded) : expanded;
+
+    /**
+     * Every slot came back empty, so there is no declaration here. v4's bare `transform`,
+     * `filter` and `backdrop-filter` do this when no utility fills them: the browser drops the
+     * empty declaration, and StyleX's value parser crashes on it outright.
+     */
+    if (value === "") return;
+
     const key = KEY(path);
-    const group = decls.get(key) ?? { path, props: new Map<string, string>() };
-    decls.set(key, group);
+    const group = declarations.get(key) ?? { path, props: new Map<string, string>() };
+    declarations.set(key, group);
     group.props.set(camel(prop), value);
   };
 
 type Writer = ReturnType<typeof makeWriter>;
-type Walker = (node: postcss.Container, path: CondPath, candidate: string) => void;
+type Walker = (node: postcss.Container, path: ConditionPath, className: string) => void;
 
-/** Walks one candidate's CSS, turning nested rules and at-rules into condition paths. */
-const makeWalker = (write: Writer, refusals: Refusals): Walker => {
-  const walk = (node: postcss.Container, path: CondPath, candidate: string): void => {
+/** Walks one className's CSS, turning nested rules and at-rules into condition paths. */
+const makeWalker = (write: Writer, skips: Skips): Walker => {
+  const walk = (node: postcss.Container, path: ConditionPath, className: string): void => {
     node.each(child => {
-      if (child.type === "decl") write(path, child.prop, child.value, candidate);
-      else if (child.type === "atrule") walkAtRule(child, path, candidate);
-      else if (child.type === "rule") walkRule(child, path, candidate);
+      if (child.type === "decl") write(path, child, className);
+      else if (child.type === "atrule") walkAtRule(child, path, className);
+      else if (child.type === "rule") walkRule(child, path, className);
     });
   };
 
-  const walkAtRule = (at: AtRule, path: CondPath, candidate: string): void => {
+  const walkAtRule = (at: AtRule, path: ConditionPath, className: string): void => {
     if (at.name === "property") return; // read already, in collectTwVars
     if (!CONDITION_AT_RULES.has(at.name)) {
-      refusals.add({
+      skips.add({
         reason: "unsupported-at-rule",
-        candidate,
-        detail: `"${candidate}" emits @${at.name}, which has no StyleX condition form.`,
+        class: className,
+        detail: `"${className}" emits @${at.name}, which has no StyleX condition form.`,
         hint: "Move this rule to a plain CSS file.",
       });
       return;
     }
-    walk(at, [...path, `@${at.name} ${at.params}`], candidate);
+    walk(at, [...path, `@${at.name} ${at.params}`], className);
   };
 
-  const walkRule = (rule: Rule, path: CondPath, candidate: string): void => {
-    const suffix = selfSelector(rule.selector, candidate);
+  const walkRule = (rule: Rule, path: ConditionPath, className: string): void => {
+    const suffix = selfSelector(rule.selector, className);
     if (suffix === null) {
-      refusals.add(classifySelector(rule.selector, candidate));
+      skips.add(classifySelector(rule.selector, className));
       return;
     }
-    walk(rule, suffix ? [...path, suffix] : path, candidate);
+    walk(rule, suffix ? [...path, suffix] : path, className);
   };
 
   return walk;
 };
 
-/** Resolve one element's full candidate set into an ordered declaration map. */
-export const resolveElement = (ds: DesignSystem, candidates: string[]): Resolved => {
-  const refusals = makeRefusals();
-  const decls: Resolved["decls"] = new Map();
+/** Resolve one element's full className set into an ordered declaration map. */
+export const resolveClasses = (ds: DesignSystem, classNames: string[]): ResolvedClasses => {
+  const skips = newSkips();
+  const declarations: ResolvedClasses["declarations"] = new Map();
 
-  const known = orderedKnown(ds, candidates, refusals);
+  const known = orderedKnown(ds, classNames, skips);
   const roots = ds.candidatesToCss(known).map(css => (css === null ? null : postcss.parse(css)));
 
-  const walk = makeWalker(makeWriter(decls, collectTwVars(roots), refusals), refusals);
-  known.forEach((candidate, i) => {
+  const walk = makeWalker(makeWriter(declarations, collectTwVars(roots), skips), skips);
+  known.forEach((className, i) => {
     const root = roots[i];
-    if (root) walk(root, [], candidate);
+    if (root) walk(root, [], className);
   });
 
-  return { decls, refusals: refusals.list };
+  return { declarations, skips: skips.list };
 };
 
-const classifySelector = (selector: string, candidate: string): Refusal => {
+const classifySelector = (selector: string, className: string): Skip => {
   const s = esc(selector);
-  if (/>\s*:not\(:last-child\)/.test(s) || /^(space|divide)-/.test(candidate))
+  if (/>\s*:not\(:last-child\)/.test(s) || /^(space|divide)-/.test(className))
     return {
-      reason: "child-styling-utility",
-      candidate,
-      detail: `"${candidate}" styles this element's children via "${s}".`,
+      reason: "styles-children",
+      class: className,
+      detail: `"${className}" styles this element's children via "${s}".`,
       hint: "Use gap on the parent, or move the style onto the child component.",
     };
   if (/\.group|\.peer/.test(s))
     return {
-      reason: "sibling-variant",
-      candidate,
-      detail: `"${candidate}" depends on a marked ancestor or sibling ("${s}").`,
+      reason: "sibling-state",
+      class: className,
+      detail: `"${className}" depends on a marked ancestor or sibling ("${s}").`,
       hint: "Use stylex.when.ancestor()/siblingBefore() plus stylex.defaultMarker() on that element.",
     };
   // `&:is(.dark *)` and friends: the element matches only under some ancestor.
   if (/^&?:is\(|^&?:where\(/.test(s.trim()) || /\*/.test(s))
     return {
-      reason: "ancestor-state",
-      candidate,
-      detail: `"${candidate}" applies only under an ancestor ("${s}").`,
+      reason: "parent-state",
+      class: className,
+      detail: `"${className}" applies only under an ancestor ("${s}").`,
       hint: "For dark mode use stylex.createTheme(); otherwise stylex.when.ancestor() with a marker.",
     };
   return {
     reason: "descendant-selector",
-    candidate,
-    detail: `"${candidate}" targets a descendant ("${s}"). StyleX hard-errors on descendant selectors.`,
+    class: className,
+    detail: `"${className}" targets a descendant ("${s}"). StyleX hard-errors on descendant selectors.`,
     hint: "Style the child component directly instead.",
   };
 };

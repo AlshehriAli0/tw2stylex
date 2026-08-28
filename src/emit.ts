@@ -1,17 +1,18 @@
-import type { CondPath, Resolved } from "./reshape.ts";
+import type { ConditionPath, ResolvedClasses } from "./reshape.ts";
 
 /** A StyleX value: a leaf, or a condition object whose `default` may be null. */
-export type SxValue = string | number | null | { [cond: string]: SxValue };
-export type SxNamespace = Record<string, SxValue>;
-type SxTree = { [cond: string]: SxValue };
+export type StyleValue = string | number | null | { [cond: string]: StyleValue };
+export type Style = Record<string, StyleValue>;
+type ConditionTree = { [cond: string]: StyleValue };
 
 const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const NUMERIC = /^-?\d+(\.\d+)?$/;
 
-const isTree = (v: SxValue | undefined): v is SxTree => typeof v === "object" && v !== null;
+const isTree = (v: StyleValue | undefined): v is ConditionTree =>
+  typeof v === "object" && v !== null;
 
 /** Unitless numbers stay numbers; StyleX reads a bare number as px for length properties. */
-const literal = (v: string): SxValue => (NUMERIC.test(v) ? Number(v) : v);
+const literal = (v: string): StyleValue => (NUMERIC.test(v) ? Number(v) : v);
 
 /**
  * StyleX allows one level of nesting inside a condition, so every selector fragment on a
@@ -19,14 +20,14 @@ const literal = (v: string): SxValue => (NUMERIC.test(v) ? Number(v) : v);
  * ['[data-disabled]', '[data-checked]', ':hover', '@media (hover: hover)']
  *   -> ['[data-disabled][data-checked]:hover', '@media (hover: hover)']
  */
-export const canonicalPath = (path: CondPath): CondPath => {
+export const flattenConditions = (path: ConditionPath): ConditionPath => {
   const selectors = path.filter(seg => !seg.startsWith("@"));
   const atRules = path.filter(seg => seg.startsWith("@"));
   const combined = selectors.join("");
   return combined ? [combined, ...atRules] : atRules;
 };
 
-const insert = (node: SxTree, path: CondPath, value: SxValue): void => {
+const insert = (node: ConditionTree, path: ConditionPath, value: StyleValue): void => {
   const [head, ...rest] = path;
   if (head === undefined) return;
   const existing = node[head];
@@ -39,18 +40,18 @@ const insert = (node: SxTree, path: CondPath, value: SxValue): void => {
   }
 
   // A scalar already here is the value for when only the outer condition holds.
-  const child: SxTree = isTree(existing) ? existing : { default: existing ?? null };
+  const child: ConditionTree = isTree(existing) ? existing : { default: existing ?? null };
   insert(child, rest, value);
   node[head] = child;
 };
 
-type Entry = { path: CondPath; value: string };
+type Entry = { path: ConditionPath; value: string };
 
 /** property -> every (condition path, value) that applies to it, in application order. */
-const groupByProperty = (resolved: Resolved): Map<string, Entry[]> => {
+const groupByProperty = (resolved: ResolvedClasses): Map<string, Entry[]> => {
   const byProp = new Map<string, Entry[]>();
-  for (const { path: rawPath, props } of resolved.decls.values()) {
-    const path = canonicalPath(rawPath);
+  for (const { path: rawPath, props } of resolved.declarations.values()) {
+    const path = flattenConditions(rawPath);
     const key = path.join(" ");
     for (const [prop, value] of props) {
       const entries = byProp.get(prop) ?? [];
@@ -64,33 +65,33 @@ const groupByProperty = (resolved: Resolved): Map<string, Entry[]> => {
   return byProp;
 };
 
-const toValue = (entries: Entry[]): SxValue => {
+const toValue = (entries: Entry[]): StyleValue => {
   const flat = entries.find(e => e.path.length === 0);
   const conditional = entries.filter(e => e.path.length > 0);
   if (conditional.length === 0) return literal(flat?.value ?? "");
 
-  const tree: SxTree = { default: flat ? literal(flat.value) : null };
+  const tree: ConditionTree = { default: flat ? literal(flat.value) : null };
   for (const { path, value } of conditional) insert(tree, path, literal(value));
   return tree;
 };
 
-/** Turn a resolved element into a single StyleX namespace object. */
-export const toNamespace = (resolved: Resolved): SxNamespace => {
-  const ns: SxNamespace = {};
+/** Turn resolved declarations into one StyleX style object. */
+export const toStyle = (resolved: ResolvedClasses): Style => {
+  const ns: Style = {};
   for (const [prop, entries] of groupByProperty(resolved)) ns[prop] = toValue(entries);
   return ns;
 };
 
 const key = (k: string): string => (IDENT.test(k) ? k : JSON.stringify(k));
 
-const printValue = (value: SxValue, indent: number): string => {
+const printValue = (value: StyleValue, indent: number): string => {
   if (value === null) return "null";
   if (typeof value === "number") return String(value);
   if (typeof value === "string") return JSON.stringify(value);
   return printObject(value, indent);
 };
 
-const printObject = (obj: SxTree | SxNamespace, indent: number): string => {
+const printObject = (obj: ConditionTree | Style, indent: number): string => {
   const pad = " ".repeat(indent + 2);
   const lines = Object.entries(obj).map(
     entry => `${pad}${key(entry[0])}: ${printValue(entry[1], indent + 2)},`,
@@ -98,13 +99,10 @@ const printObject = (obj: SxTree | SxNamespace, indent: number): string => {
   return `{\n${lines.join("\n")}\n${" ".repeat(indent)}}`;
 };
 
-/** Serialise namespaces to `stylex.create({...})` source. */
-export const printCreate = (
-  namespaces: Record<string, SxNamespace>,
-  varName = "styles",
-): string => {
-  const body = Object.entries(namespaces)
-    .map(entry => `  ${key(entry[0])}: ${printObject(entry[1], 2)},`)
+/** Serialise styles to `stylex.create({...})` source. */
+export const printCreate = (styleMap: Record<string, Style>, varName = "styles"): string => {
+  const body = Object.entries(styleMap)
+    .map(([name, style]) => `  ${key(name)}: ${printObject(style, 2)},`)
     .join("\n");
   return `const ${varName} = stylex.create({\n${body}\n});`;
 };

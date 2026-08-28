@@ -6,49 +6,46 @@ import {
   isError,
   planCommand,
   readOutput,
-  refusalsCommand,
+  skippedCommand,
   type CommandResult,
 } from "./commands.ts";
-import { EXIT, fail } from "./report.ts";
-import { REASONS } from "./reshape.ts";
+import { EXIT, fail } from "./exit.ts";
+import { FIX_MEANING, FIXES, REASONS } from "./skip.ts";
 
-const HELP = `tw2sx - migrate Tailwind v4 to StyleX.
+const HELP = `tw2sx - convert Tailwind v4 to StyleX.
 
-Converts a style site only when it can prove the CSS declarations come out identical to what
-Tailwind produced. Everything else it REFUSES and reports, with a reason and a fix.
+Converts a usage only when it can prove the CSS comes out the same as Tailwind produced.
+Everything else it SKIPS and lists, with a reason and how to fix it.
 
-COMMANDS  (read-only unless marked)
-  tw2sx explain "<classes>"     Print the StyleX object for a class string, and whether it verified.
-  tw2sx plan <path>             Convert + verify a tree. Writes a JSON report.
-  tw2sx refusals <report.json>  Re-read a report, filtered.
-  tw2sx apply <path> --write    WRITES CODE. Rewrites only the sites that verified.
+COMMANDS  (nothing writes unless you say --write)
+  tw2sx explain "<classes>"    Show the StyleX for a class string, and whether it checks out.
+  tw2sx plan <path>            Convert + check a folder. Writes a JSON report.
+  tw2sx skipped <report.json>  Re-read a report, filtered.
+  tw2sx apply <path> --write   WRITES CODE. Rewrites only what converted cleanly.
 
-TYPICAL RUN
-  tw2sx plan src/components        # mismatches must be 0; refusals are the work
-  tw2sx refusals .tw2sx/plan-*.json --applicability machine-applicable
-  ...fix those, then re-run plan until the refusal count stops dropping
+A TYPICAL RUN
+  tw2sx plan src/components        # MISMATCHES must be 0; the skips are the work
+  tw2sx skipped .tw2sx/plan-*.json --fix safe
+  ...fix those, re-run plan, repeat until the skip count stops dropping
 
 OPTIONS
-  --css <file>        Tailwind entry CSS. Auto-detected from the target when omitted.
-  --json[=<fields>]   JSON output. Bare --json lists the field names you can ask for.
-  --limit <n>         Refusals printed (default 20). Use 0 for the summary alone.
-  --reason <r>        Keep one reason code.
-  --applicability <a> Keep one of: machine-applicable has-placeholders maybe-incorrect unspecified
-  --out <file>        Report path (default .tw2sx/plan-<hash>.json).
-  --write             apply only: edit files. Omitted, apply is a dry run.
-  --allow-dirty       apply only: write over a tree with uncommitted changes.
+  --css <file>        Your Tailwind entry CSS. Found automatically if you leave it out.
+  --json[=<fields>]   JSON output. Plain --json lists the field names you can ask for.
+  --limit <n>         How many skips to print (default 20). Use 0 for just the summary.
+  --reason <r>        Show one reason only.
+  --fix <f>           Show one fix type only.
+  --out <file>        Where to write the report (default .tw2sx/plan-<hash>.json).
+  --write             apply only: actually edit files. Without it, apply is a dry run.
+  --allow-dirty       apply only: write even with uncommitted changes.
 
-A refusal carries a REASON (why it was refused) and an APPLICABILITY (what to do about it):
-  machine-applicable  one right answer, safe to batch
-  has-placeholders    you must locate something the tool could not (an ancestor, a child)
-  maybe-incorrect     a rewrite exists but shifts behaviour at the edges; read the code first
-  unspecified         investigate; often not a Tailwind class at all
+Every skip says WHY it was skipped (the reason) and HOW HARD it is to fix:
+${FIXES.map(f => `  ${f.padEnd(13)} ${FIX_MEANING[f]}`).join("\n")}
 
-REASON CODES
+REASONS
   ${REASONS.join(", ")}
 
-EXIT  0 nothing refused · 1 completed with refusals · 2 usage · 3 precondition · 10 internal
-Positions are 1-based line:column.`;
+EXIT  0 nothing skipped · 1 finished with skips · 2 bad arguments · 3 not ready · 10 our bug
+Line and column numbers start at 1.`;
 
 const report = (result: CommandResult, json: boolean): number => {
   if (!isError(result)) return result.exit;
@@ -66,8 +63,8 @@ const run = async (args: Args): Promise<CommandResult> => {
       return await planCommand(args, out);
     case "apply":
       return await applyCommand(args, out);
-    case "refusals":
-      return refusalsCommand(args, out);
+    case "skipped":
+      return skippedCommand(args, out);
     case undefined:
     default:
       return fail(

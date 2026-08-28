@@ -1,34 +1,29 @@
-import {
-  APPLICABILITY,
-  REASONS,
-  type Applicability,
-  type Reason,
-  type Refusal,
-} from "./reshape.ts";
+import { fixFor, FIXES, type Fix, type Reason, type Skip } from "./skip.ts";
 import type { Mismatch } from "./verify.ts";
 
-export type Finding = {
+/** One skip, placed in a file and ready to print. */
+export type SkipLine = {
   file: string;
   line: number;
   column: number;
   reason: Reason;
-  applicability: Applicability;
-  candidate?: string;
+  fix: Fix;
+  class?: string;
   detail: string;
   hint: string;
-  /** The human-rendered one-liner, so one --json run serves the parser and a PR description. */
-  rendered: string;
+  /** The one-line rendering, so a JSON reader also gets something paste-ready. */
+  message: string;
 };
 
 export type FileResult = {
   file: string;
-  verdict: "converted" | "partial" | "refused" | "unchanged";
-  sites: number;
+  verdict: "converted" | "partial" | "skipped" | "unchanged";
+  usages: number;
   converted: number;
-  refused: number;
-  /** stylex.create source for the sites that did convert. */
+  skipped: number;
+  /** `stylex.create` source for the usages that did convert. */
   source?: string;
-  findings: Finding[];
+  skips: SkipLine[];
   mismatches: Mismatch[];
 };
 
@@ -39,133 +34,96 @@ export type Report = {
   entry: string;
   summary: {
     files: number;
-    sites: number;
+    usages: number;
     converted: number;
-    refused: number;
+    skipped: number;
     byReason: Record<string, number>;
-    byApplicability: Record<string, number>;
+    byFix: Record<string, number>;
   };
   files: FileResult[];
 };
 
-export const toFinding = (file: string, line: number, column: number, r: Refusal): Finding => {
-  const applicability = r.applicability ?? APPLICABILITY[r.reason];
+export const toSkipLine = (file: string, line: number, column: number, skip: Skip): SkipLine => {
+  const named = skip.class === undefined ? "" : ` "${skip.class}"`;
   return {
     file,
     line,
     column,
-    reason: r.reason,
-    applicability,
-    candidate: r.candidate,
-    detail: r.detail,
-    hint: r.hint,
-    rendered: `${file}:${line}:${column}: refused ${r.reason}${r.candidate ? ` "${r.candidate}"` : ""}: ${r.detail} help: ${r.hint}`,
+    reason: skip.reason,
+    fix: fixFor(skip),
+    class: skip.class,
+    detail: skip.detail,
+    hint: skip.hint,
+    message: `${file}:${line}:${column}: skipped ${skip.reason}${named}: ${skip.detail} fix: ${skip.hint}`,
   };
 };
 
-/** The order the work should be done in, so the summary reads as a plan. */
-const WORK_ORDER: Applicability[] = [
-  "machine-applicable",
-  "has-placeholders",
-  "maybe-incorrect",
-  "unspecified",
-];
+/** The order to work skips in: bulk-safe first, guesswork last. */
+const WORK_ORDER: Fix[] = ["safe", "needs-lookup", "check-first", "unknown"];
 
 const mismatchLine = (m: Mismatch): string =>
-  `  ${m.namespace} [${m.condition}] ${m.property}: tailwind=${m.tailwind ?? "(none)"} stylex=${m.stylex ?? "(none)"}`;
+  `  ${m.styleName} [${m.condition}] ${m.property}: tailwind=${m.tailwind ?? "(none)"} stylex=${m.stylex ?? "(none)"}`;
 
 /** Mismatches are a hard stop, so they print before anything the agent might act on. */
 const mismatchSection = (report: Report, limit: number): string[] => {
   const all = report.files.flatMap(f => f.mismatches);
-  const stop = all.length
-    ? " - STOP: generated StyleX does not match Tailwind. This is a tw2sx bug."
-    : "";
-  return [`DECLARATION MISMATCHES: ${all.length}${stop}`, ...all.slice(0, limit).map(mismatchLine)];
+  const stop =
+    all.length > 0 ? " - STOP: our StyleX does not match Tailwind. This is a tw2sx bug." : "";
+  return [`MISMATCHES: ${all.length}${stop}`, ...all.slice(0, limit).map(mismatchLine)];
 };
 
-/** Refusal counts, grouped so the list reads as the order to work them in. */
-const refusalBreakdown = (byReason: Record<string, number>): string[] => {
-  const lines: string[] = ["", "Refusals, in the order to work them:"];
-  for (const applicability of WORK_ORDER) {
-    const rows = Object.entries(byReason)
-      .filter(([reason]) => applicabilityOf(reason) === applicability)
-      .sort((a, b) => b[1] - a[1]);
+/**
+ * Counts per (fix, reason), read off each skip.
+ *
+ * Reading the fix off the skip rather than recomputing it from the reason matters: a skip can
+ * override the default, and this table sits directly beside a `Next:` line built from the same
+ * skips. Recomputing here made the two disagree.
+ */
+const countByFixAndReason = (skips: SkipLine[]): Map<Fix, Map<string, number>> => {
+  const counts = new Map<Fix, Map<string, number>>(FIXES.map(fix => [fix, new Map()]));
+  for (const skip of skips) {
+    const byReason = counts.get(skip.fix);
+    byReason?.set(skip.reason, (byReason.get(skip.reason) ?? 0) + 1);
+  }
+  return counts;
+};
+
+const breakdown = (skips: SkipLine[]): string[] => {
+  const counts = countByFixAndReason(skips);
+  const lines: string[] = ["", "Skipped, in the order to work them:"];
+  for (const fix of WORK_ORDER) {
+    const rows = [...(counts.get(fix) ?? [])].sort((a, b) => b[1] - a[1]);
     if (rows.length === 0) continue;
-    lines.push(`  ${applicability}`);
+    lines.push(`  ${fix}`);
     for (const [reason, n] of rows) lines.push(`    ${reason.padEnd(22)} ${String(n).padStart(4)}`);
   }
   return lines;
 };
 
-const findingsSection = (
-  findings: Finding[],
-  limit: number,
-  byReason: Record<string, number>,
-): string[] => {
-  if (findings.length === 0) return [];
-  const shown = findings.slice(0, limit).map(f => f.rendered);
-  const elided =
-    findings.length > limit ? [`\nShowing ${limit} of ${findings.length} refusals.`] : [];
-  return ["", ...shown, ...elided, ...refusalBreakdown(byReason)];
+const skipSection = (skips: SkipLine[], limit: number): string[] => {
+  if (skips.length === 0) return [];
+  const shown = skips.slice(0, limit).map(s => s.message);
+  const elided = skips.length > limit ? [`\nShowing ${limit} of ${skips.length} skipped.`] : [];
+  return ["", ...shown, ...elided, ...breakdown(skips)];
 };
 
-const nextStepSection = (report: Report, reportPath: string | undefined): string[] => {
+const nextStep = (skips: SkipLine[], reportPath: string | undefined): string[] => {
   if (reportPath === undefined) return [];
-  const first = WORK_ORDER.find(a => report.summary.byApplicability[a]);
+  const first = WORK_ORDER.find(fix => skips.some(s => s.fix === fix));
   const next =
-    first === undefined
-      ? []
-      : [`Next: tw2sx refusals ${reportPath} --applicability ${first} --limit 20`];
+    first === undefined ? [] : [`Next: tw2sx skipped ${reportPath} --fix ${first} --limit 20`];
   return ["", `Full report: ${reportPath}`, ...next];
 };
 
-/** oxlint's `agent` format: one line per finding, ~31 tokens each. The default. */
-export const renderAgent = (report: Report, limit: number, reportPath?: string): string => {
-  const { files, sites, converted, refused, byReason } = report.summary;
+/** One line per skip, so an agent can read the whole thing cheaply. The default output. */
+export const renderReport = (report: Report, limit: number, reportPath?: string): string => {
+  const { files, usages, converted, skipped } = report.summary;
+  const skips = report.files.flatMap(f => f.skips);
   return [
     // Verdict on line one - it survives truncation.
-    `${files} files · ${sites} sites · ${converted} converted · ${refused} refused`,
+    `${files} files · ${usages} usages · ${converted} converted · ${skipped} skipped`,
     ...mismatchSection(report, limit),
-    ...findingsSection(
-      report.files.flatMap(f => f.findings),
-      limit,
-      byReason,
-    ),
-    ...nextStepSection(report, reportPath),
+    ...skipSection(skips, limit),
+    ...nextStep(skips, reportPath),
   ].join("\n");
 };
-
-const isReason = (v: string): v is Reason => (REASONS as readonly string[]).includes(v);
-
-const applicabilityOf = (reason: string): Applicability =>
-  isReason(reason) ? APPLICABILITY[reason] : "unspecified";
-
-/** Error envelope. Every failure is shaped the same and carries a runnable hint. */
-export type ErrorEnvelope = {
-  ok: false;
-  code: string;
-  exit_code: number;
-  message: string;
-  hint: string;
-};
-
-export const fail = (
-  code: string,
-  exit_code: number,
-  message: string,
-  hint: string,
-): ErrorEnvelope => ({
-  ok: false,
-  code,
-  exit_code,
-  message,
-  hint,
-});
-
-export const EXIT = {
-  CLEAN: 0,
-  REFUSALS: 1,
-  USAGE: 2,
-  PRECONDITION: 3,
-  INTERNAL: 10,
-} as const;

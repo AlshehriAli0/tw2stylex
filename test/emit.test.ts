@@ -1,48 +1,48 @@
 import { describe, expect, test } from "bun:test";
 
-import { canonicalPath, printCreate, toNamespace, type SxNamespace } from "../src/emit.ts";
-import type { CondPath, Resolved } from "../src/reshape.ts";
+import { flattenConditions, printCreate, toStyle, type Style } from "../src/emit.ts";
+import type { ConditionPath, ResolvedClasses } from "../src/reshape.ts";
 
-/** Build a Resolved by hand so these tests need no Tailwind design system. */
-const resolved = (groups: Array<[CondPath, Record<string, string>]>): Resolved => {
-  const decls: Resolved["decls"] = new Map();
+/** Build a ResolvedClasses by hand so these tests need no Tailwind design system. */
+const resolved = (groups: Array<[ConditionPath, Record<string, string>]>): ResolvedClasses => {
+  const declarations: ResolvedClasses["declarations"] = new Map();
   for (const [path, props] of groups) {
-    decls.set(path.join(" "), { path, props: new Map(Object.entries(props)) });
+    declarations.set(path.join(" "), { path, props: new Map(Object.entries(props)) });
   }
-  return { decls, refusals: [] };
+  return { declarations, skips: [] };
 };
 
-const ns = (groups: Array<[CondPath, Record<string, string>]>): SxNamespace =>
-  toNamespace(resolved(groups));
+const ns = (groups: Array<[ConditionPath, Record<string, string>]>): Style =>
+  toStyle(resolved(groups));
 
-describe("canonicalPath", () => {
+describe("flattenConditions", () => {
   test("an unconditioned path stays empty", () => {
-    expect(canonicalPath([])).toEqual([]);
+    expect(flattenConditions([])).toEqual([]);
   });
 
   test("selector fragments collapse into one compound key", () => {
-    expect(canonicalPath(["[data-disabled]", "[data-checked]", ":hover"])).toEqual([
+    expect(flattenConditions(["[data-disabled]", "[data-checked]", ":hover"])).toEqual([
       "[data-disabled][data-checked]:hover",
     ]);
   });
 
   test("at-rules stay nested after the selector", () => {
-    expect(canonicalPath([":hover", "@media (hover: hover)"])).toEqual([
+    expect(flattenConditions([":hover", "@media (hover: hover)"])).toEqual([
       ":hover",
       "@media (hover: hover)",
     ]);
   });
 
   test("an at-rule with no selector needs no compound key", () => {
-    expect(canonicalPath(["@media (width >= 48rem)"])).toEqual(["@media (width >= 48rem)"]);
+    expect(flattenConditions(["@media (width >= 48rem)"])).toEqual(["@media (width >= 48rem)"]);
   });
 
   test("selector order is preserved, since :not(x):hover differs from :hover:not(x) textually", () => {
-    expect(canonicalPath([":active", ":not([disabled])"])).toEqual([":active:not([disabled])"]);
+    expect(flattenConditions([":active", ":not([disabled])"])).toEqual([":active:not([disabled])"]);
   });
 });
 
-describe("toNamespace", () => {
+describe("toStyle", () => {
   test("an unconditioned declaration is a bare value", () => {
     expect(ns([[[], { display: "flex" }]])).toEqual({ display: "flex" });
   });
@@ -135,7 +135,7 @@ describe("toNamespace", () => {
 });
 
 describe("printCreate", () => {
-  test("names the variable and each namespace", () => {
+  test("names the variable and each style", () => {
     const src = printCreate({ card: { display: "flex" } });
     expect(src).toContain("const styles = stylex.create({");
     expect(src).toContain("card: {");
@@ -152,7 +152,7 @@ describe("printCreate", () => {
     expect(src).toContain("default: null");
   });
 
-  test("quotes a namespace name that is not an identifier", () => {
+  test("quotes a style name that is not an identifier", () => {
     expect(printCreate({ "row-action": { display: "flex" } })).toContain('"row-action": {');
   });
 

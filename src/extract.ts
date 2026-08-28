@@ -3,7 +3,7 @@ import traverseMod from "@babel/traverse";
 import * as t from "@babel/types";
 
 import { cjsDefault } from "./interop.ts";
-import type { Refusal } from "./reshape.ts";
+import type { Skip } from "./skip.ts";
 
 const isTraverse = (v: unknown): v is typeof traverseMod => typeof v === "function";
 const unwrapped = cjsDefault(traverseMod);
@@ -11,28 +11,34 @@ const traverse = isTraverse(unwrapped) ? unwrapped : traverseMod;
 
 export type Loc = { line: number; column: number };
 
-export type SiteKind = "literal" | "cn-call" | "cva-base" | "cva-variant";
+export type UsageKind = "literal" | "cn-call" | "cva-base" | "cva-variant";
 
-/** One place in a file where styles are applied. */
-export type Site = {
-  /** Static candidates we can resolve. */
-  candidates: string[];
+/** One place in a file where classes are applied. */
+export type Usage = {
+  /** Static classNames we can resolve. */
+  classNames: string[];
   loc: Loc;
   /** Byte range of the whole JSX attribute, for byte-preserving rewrites. */
   range?: [number, number];
   /** True when the attribute sits on a lowercase host element, so props can be spread. */
   hostElement?: boolean;
-  kind: SiteKind;
-  /** For cva sites: which axis/value this belongs to. */
+  kind: UsageKind;
+  /** For cva usages: which axis/value this belongs to. */
   variantAxis?: string;
   variantValue?: string;
   /** Anything in the expression we could not statically read. */
-  refusals: Refusal[];
+  skips: Skip[];
 };
 
-export type FileScan = { sites: Site[]; hasStyleX: boolean };
+export type ScanResult = { usages: Usage[]; hasStyleX: boolean };
 
 const MERGE_FNS = new Set(["cn", "clsx", "classnames", "twMerge", "twJoin", "cx"]);
+
+/**
+ * `buttonVariants(...)`, `badgeVariants(...)` - the cva naming convention. We cannot follow the
+ * call across files, but naming it precisely beats reporting it as an unreadable expression.
+ */
+const looksLikeVariantFunction = (name: string): boolean => name.endsWith("Variants");
 
 const locOf = (node: t.Node): Loc => ({
   line: node.loc?.start.line ?? 0,
@@ -49,6 +55,14 @@ const keyName = (key: t.Node): string | undefined => {
   return undefined;
 };
 
+/**
+ * A property's key when it is written literally. `{ [k]: on }` parses its key as the identifier
+ * `k`, so reading the key without checking `computed` turns the variable's *name* into a class
+ * and sends the agent hunting for a typo in a class that was never there.
+ */
+const propKey = (prop: t.ObjectProperty): string | undefined =>
+  prop.computed ? undefined : keyName(prop.key);
+
 /** The callee's plain name, for `cn(...)` and `utils.cn(...)` alike. */
 const calleeName = (callee: t.Node): string => {
   if (t.isIdentifier(callee)) return callee.name;
@@ -56,50 +70,49 @@ const calleeName = (callee: t.Node): string => {
   return "";
 };
 
-type Reader = { classes: string[]; refusals: Refusal[] };
+type Reader = { classes: string[]; skips: Skip[] };
 
-const dynamic = (node: t.Node, detail: string, hint: string): Refusal => ({
-  reason: "dynamic-expression",
+const dynamic = (node: t.Node, detail: string, hint: string): Skip => ({
+  reason: "dynamic-classes",
   detail: `${detail} at line ${locOf(node).line}.`,
   hint,
 });
 
-/** Classes read out of a branch whose parent already recorded the refusal. */
+/** Classes read out of a branch whose parent already recorded the skip. */
 const classesOnly = (node: t.Node): string[] => readClasses(node).classes;
 
 const TEMPLATE_HINT =
-  "Lift the condition into a boolean and apply a separate StyleX namespace conditionally.";
-const TERNARY_HINT =
-  "Emit both branches as separate namespaces and select with the same condition.";
-const LOGICAL_HINT = "Apply the namespace conditionally: stylex.props(base, cond && styles.x).";
-const OBJECT_HINT = "Each key becomes a namespace applied under the same condition.";
+  "Lift the condition into a boolean and apply a separate StyleX style conditionally.";
+const TERNARY_HINT = "Write both branches as separate styles and pick one with the same condition.";
+const LOGICAL_HINT = "Apply the style conditionally: stylex.props(base, cond && styles.x).";
+const OBJECT_HINT = "Each key becomes a style applied under the same condition.";
 const CALL_HINT =
   "Convert it by hand, or add it to the merge-function list if it behaves like clsx.";
 const PROP_HINT = `Give the component a "style?: StyleXStylesWithout<{...}>" prop and pass it last to stylex.props(); see the skill's references/component-api.md.`;
 
-/** A template literal contributes its static chunks; each interpolation is a refusal. */
-const readTemplate = (n: t.TemplateLiteral, refusals: Refusal[]): string[] => {
+/** A template literal contributes its static chunks; each `${...}` is a skip. */
+const readTemplate = (n: t.TemplateLiteral, skips: Skip[]): string[] => {
   if (n.expressions.length > 0)
-    refusals.push(
+    skips.push(
       dynamic(n, `Template literal with ${n.expressions.length} interpolation(s)`, TEMPLATE_HINT),
     );
   return n.quasis.flatMap(q => splitClasses(q.value.cooked ?? q.value.raw));
 };
 
 /** clsx({ 'a b': cond }) - the keys are the classes. */
-const readObjectMap = (n: t.ObjectExpression, refusals: Refusal[]): string[] => {
+const readObjectMap = (n: t.ObjectExpression, skips: Skip[]): string[] => {
   const classes = n.properties.flatMap(prop => {
     if (!t.isObjectProperty(prop)) return [];
-    const key = keyName(prop.key);
+    const key = propKey(prop);
     return key === undefined ? [] : splitClasses(key);
   });
-  refusals.push(dynamic(n, "Object-form class map", OBJECT_HINT));
+  skips.push(dynamic(n, "Object-form class map", OBJECT_HINT));
   return classes;
 };
 
-const readIdentifier = (n: t.Identifier, refusals: Refusal[]): string[] => {
-  refusals.push({
-    reason: "contract-change",
+const readIdentifier = (n: t.Identifier, skips: Skip[]): string[] => {
+  skips.push({
+    reason: "passed-in-classes",
     detail: `Variable "${n.name}" flows into a class string at line ${locOf(n).line}.`,
     hint: PROP_HINT,
   });
@@ -107,29 +120,39 @@ const readIdentifier = (n: t.Identifier, refusals: Refusal[]): string[] => {
 };
 
 /**
- * Pull static class strings out of a className expression, recording a refusal for every
+ * Pull static class strings out of a className expression, recording a skip for every
  * part we could not read statically.
  */
 export const readClasses = (node: t.Node): Reader => {
-  const refusals: Refusal[] = [];
+  const skips: Skip[] = [];
 
   const walk = (n: t.Node): string[] => {
     if (t.isStringLiteral(n)) return splitClasses(n.value);
-    if (t.isTemplateLiteral(n)) return readTemplate(n, refusals);
+    if (t.isTemplateLiteral(n)) return readTemplate(n, skips);
     if (t.isArrayExpression(n)) return n.elements.flatMap(e => (e ? walk(e) : []));
-    if (t.isObjectExpression(n)) return readObjectMap(n, refusals);
-    if (t.isIdentifier(n)) return readIdentifier(n, refusals);
+    if (t.isObjectExpression(n)) return readObjectMap(n, skips);
+    if (t.isIdentifier(n)) return readIdentifier(n, skips);
     if (t.isCallExpression(n)) return walkCall(n);
     if (t.isConditionalExpression(n)) return walkTernary(n);
     if (t.isLogicalExpression(n)) return walkLogical(n);
     return [];
   };
 
-  /** A known merge helper is transparent; anything else is opaque. */
+  /** A known merge helper is transparent; anything else we cannot see through. */
   const walkCall = (n: t.CallExpression): string[] => {
     const name = calleeName(n.callee);
     if (MERGE_FNS.has(name)) return n.arguments.flatMap(a => walk(a));
-    refusals.push(
+
+    if (looksLikeVariantFunction(name)) {
+      skips.push({
+        reason: "variant-function",
+        detail: `${name}() looks like a cva() variant function defined in another file.`,
+        hint: `Run tw2sx plan over the file that defines ${name} as well - its styles are converted there.`,
+      });
+      return [];
+    }
+
+    skips.push(
       dynamic(
         n,
         `Call to ${name || "an expression"}() is not a known class-merging helper`,
@@ -140,16 +163,16 @@ export const readClasses = (node: t.Node): Reader => {
   };
 
   const walkTernary = (n: t.ConditionalExpression): string[] => {
-    refusals.push(dynamic(n, "Ternary in a class expression", TERNARY_HINT));
+    skips.push(dynamic(n, "Ternary in a class expression", TERNARY_HINT));
     return [...classesOnly(n.consequent), ...classesOnly(n.alternate)];
   };
 
   const walkLogical = (n: t.LogicalExpression): string[] => {
-    refusals.push(dynamic(n, "Conditional (&&/||) class", LOGICAL_HINT));
+    skips.push(dynamic(n, "Conditional (&&/||) class", LOGICAL_HINT));
     return classesOnly(n.right);
   };
 
-  return { classes: walk(node), refusals };
+  return { classes: walk(node), skips };
 };
 
 /** The className/class attribute's value expression, if it has a readable one. */
@@ -166,16 +189,16 @@ const classExpression = (attr: t.JSXAttribute): t.Node | undefined => {
  * StyleX's no-conflicting-props: an element spreading stylex.props() must not also carry
  * its own style attribute - one of them silently loses.
  */
-const styleAttrRefusal = (element: t.JSXOpeningElement): Refusal | undefined => {
+const styleAttrSkip = (element: t.JSXOpeningElement): Skip | undefined => {
   const styleAttr = element.attributes.find(
     (a): a is t.JSXAttribute =>
       t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === "style",
   );
   if (!styleAttr) return undefined;
   return {
-    reason: "conflicting-props",
+    reason: "two-style-sources",
     detail: `This element has both className and a style attribute (line ${locOf(styleAttr).line}).`,
-    hint: "Fold the inline style into the StyleX namespace, or use a dynamic style function - an element cannot have both stylex.props() and a style prop.",
+    hint: "Fold the inline style into the StyleX style, or use a dynamic style function - an element cannot have both stylex.props() and a style prop.",
   };
 };
 
@@ -187,72 +210,72 @@ const rangeOf = (node: t.Node): [number, number] | undefined =>
     ? [node.start, node.end]
     : undefined;
 
-const jsxSite = (
+const jsxUsage = (
   attr: t.JSXAttribute,
   element: t.JSXOpeningElement | undefined,
-): Site | undefined => {
+): Usage | undefined => {
   const expr = classExpression(attr);
   if (!expr) return undefined;
 
-  const { classes, refusals } = readClasses(expr);
-  const conflict = element ? styleAttrRefusal(element) : undefined;
-  if (conflict) refusals.push(conflict);
-  if (classes.length === 0 && refusals.length === 0) return undefined;
+  const { classes, skips } = readClasses(expr);
+  const conflict = element ? styleAttrSkip(element) : undefined;
+  if (conflict) skips.push(conflict);
+  if (classes.length === 0 && skips.length === 0) return undefined;
 
   return {
-    candidates: classes,
+    classNames: classes,
     loc: locOf(attr),
     range: rangeOf(attr),
     hostElement: element ? isHostElement(element) : false,
     kind: t.isCallExpression(expr) ? "cn-call" : "literal",
-    refusals,
+    skips,
   };
 };
 
 /** Every `variants: { axis: { value: "classes" } }` entry of a cva() config. */
 /** Every `value: "classes"` pair under one variant axis. */
-const axisSites = (variantAxis: string, values: t.ObjectExpression): Site[] =>
+const axisUsages = (variantAxis: string, values: t.ObjectExpression): Usage[] =>
   values.properties.flatMap(value => {
     if (!t.isObjectProperty(value)) return [];
-    const { classes, refusals } = readClasses(value.value);
+    const { classes, skips } = readClasses(value.value);
     return [
       {
-        candidates: classes,
+        classNames: classes,
         loc: locOf(value),
         kind: "cva-variant" as const,
         variantAxis,
-        variantValue: keyName(value.key) ?? "",
-        refusals,
+        variantValue: propKey(value) ?? "",
+        skips,
       },
     ];
   });
 
-const cvaVariantSites = (config: t.ObjectExpression): Site[] => {
+const cvaVariantUsages = (config: t.ObjectExpression): Usage[] => {
   const variants = config.properties.find(
-    (p): p is t.ObjectProperty => t.isObjectProperty(p) && keyName(p.key) === "variants",
+    (p): p is t.ObjectProperty => t.isObjectProperty(p) && propKey(p) === "variants",
   );
   if (!variants || !t.isObjectExpression(variants.value)) return [];
 
   return variants.value.properties.flatMap(axis =>
     t.isObjectProperty(axis) && t.isObjectExpression(axis.value)
-      ? axisSites(keyName(axis.key) ?? "", axis.value)
+      ? axisUsages(propKey(axis) ?? "", axis.value)
       : [],
   );
 };
 
-const cvaSites = (call: t.CallExpression): Site[] => {
+const cvaUsages = (call: t.CallExpression): Usage[] => {
   const [base, config] = call.arguments;
-  const sites: Site[] = [];
+  const usages: Usage[] = [];
 
   if (base) {
-    const { classes, refusals } = readClasses(base);
-    sites.push({ candidates: classes, loc: locOf(call), kind: "cva-base", refusals });
+    const { classes, skips } = readClasses(base);
+    usages.push({ classNames: classes, loc: locOf(call), kind: "cva-base", skips });
   }
-  if (config && t.isObjectExpression(config)) sites.push(...cvaVariantSites(config));
-  return sites;
+  if (config && t.isObjectExpression(config)) usages.push(...cvaVariantUsages(config));
+  return usages;
 };
 
-export const scanFile = (code: string, filename: string): FileScan => {
+export const scanFile = (code: string, filename: string): ScanResult => {
   const ast = parse(code, {
     sourceFilename: filename,
     sourceType: "module",
@@ -260,7 +283,7 @@ export const scanFile = (code: string, filename: string): FileScan => {
     errorRecovery: true,
   });
 
-  const sites: Site[] = [];
+  const usages: Usage[] = [];
   let hasStyleX = false;
 
   traverse(ast, {
@@ -270,13 +293,13 @@ export const scanFile = (code: string, filename: string): FileScan => {
     JSXAttribute(p) {
       const parent = p.parentPath.node;
       const element = t.isJSXOpeningElement(parent) ? parent : undefined;
-      const site = jsxSite(p.node, element);
-      if (site) sites.push(site);
+      const site = jsxUsage(p.node, element);
+      if (site) usages.push(site);
     },
     CallExpression(p) {
-      if (calleeName(p.node.callee) === "cva") sites.push(...cvaSites(p.node));
+      if (calleeName(p.node.callee) === "cva") usages.push(...cvaUsages(p.node));
     },
   });
 
-  return { sites, hasStyleX };
+  return { usages, hasStyleX };
 };
