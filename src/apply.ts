@@ -1,14 +1,16 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import MagicString from 'magic-string';
-import type { LoadedSystem } from './resolve.ts';
-import { scanFile } from './extract.ts';
-import { resolveElement } from './reshape.ts';
-import { toNamespace, printCreate, type SxNamespace } from './emit.ts';
-import { verifyNamespace } from './verify.ts';
-import { namespaceName } from './pipeline.ts';
+import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+
+import MagicString from "magic-string";
+
+import { toNamespace, printCreate, type SxNamespace } from "./emit.ts";
+import { scanFile, type Site } from "./extract.ts";
+import { namespaceName } from "./pipeline.ts";
+import { resolveElement } from "./reshape.ts";
+import type { LoadedSystem } from "./resolve.ts";
+import { verifyNamespace } from "./verify.ts";
 
 export type ApplyFileResult = {
   file: string;
@@ -19,28 +21,39 @@ export type ApplyFileResult = {
   diff?: string;
 };
 
-export const sha1 = (s: string) => crypto.createHash('sha1').update(s).digest('hex');
+export const sha1 = (s: string): string => crypto.createHash("sha1").update(s).digest("hex");
 
 /** Uncommitted paths under `dir`, or null when this is not a git repo. */
-export function dirtyFiles(dir: string): string[] | null {
+export const dirtyFiles = (dir: string): string[] | null => {
   try {
-    const out = execFileSync('git', ['status', '--porcelain', '--', dir], {
+    const out = execFileSync("git", ["status", "--porcelain", "--", dir], {
       cwd: dir,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
     });
-    return out.split('\n').filter(Boolean);
+    return out.split("\n").filter(Boolean);
   } catch {
     return null;
   }
-}
+};
+
+/**
+ * The byte range to overwrite, when this site is safe to rewrite in place: no refusals,
+ * static classes, and a host element that can actually receive a props spread.
+ */
+const rewritableRange = (site: Site): [number, number] | undefined => {
+  if (site.refusals.length > 0 || site.candidates.length === 0) return undefined;
+  if (site.hostElement !== true) return undefined;
+  if (site.kind !== "literal" && site.kind !== "cn-call") return undefined;
+  return site.range;
+};
 
 /** Write via a temp file in the same directory, then rename. Never leave a half-written file. */
-function atomicWrite(file: string, content: string) {
+const atomicWrite = (file: string, content: string): void => {
   const tmp = path.join(path.dirname(file), `.${path.basename(file)}.tw2sx-${process.pid}`);
   fs.writeFileSync(tmp, content);
   fs.renameSync(tmp, file);
-}
+};
 
 /**
  * Rewrite one file: replace the className attributes we could fully convert with a
@@ -49,12 +62,13 @@ function atomicWrite(file: string, content: string) {
  * All-or-nothing per file: if anything throws, the file is left untouched.
  * A site is only rewritten when it has zero refusals AND it verified.
  */
-export function applyFile(sys: LoadedSystem, file: string, write: boolean): ApplyFileResult {
-  const code = fs.readFileSync(file, 'utf8');
+export const applyFile = (sys: LoadedSystem, file: string, write: boolean): ApplyFileResult => {
+  const code = fs.readFileSync(file, "utf8");
   const { sites, hasStyleX } = scanFile(code, file);
 
   // Already migrated: leave it alone so repeated runs are free and silent.
-  if (hasStyleX) return { file, written: false, rewritten: 0, skipped: sites.length, reason: 'already-stylex' };
+  if (hasStyleX)
+    return { file, written: false, rewritten: 0, skipped: sites.length, reason: "already-stylex" };
 
   const s = new MagicString(code);
   const namespaces: Record<string, SxNamespace> = {};
@@ -63,14 +77,9 @@ export function applyFile(sys: LoadedSystem, file: string, write: boolean): Appl
   let skipped = 0;
 
   sites.forEach((site, i) => {
-    // Only a JSX attribute on a host element can take a props spread safely.
-    const convertible =
-      site.refusals.length === 0 &&
-      site.candidates.length > 0 &&
-      site.range &&
-      site.hostElement &&
-      (site.kind === 'literal' || site.kind === 'cn-call');
-    if (!convertible) {
+    // Only a clean JSX attribute on a host element can take a props spread safely.
+    const range = rewritableRange(site);
+    if (!range) {
       skipped++;
       return;
     }
@@ -86,11 +95,12 @@ export function applyFile(sys: LoadedSystem, file: string, write: boolean): Appl
       return;
     }
     namespaces[name] = ns;
-    s.update(site.range![0], site.range![1], `{...stylex.props(styles.${name})}`);
+    s.update(range[0], range[1], `{...stylex.props(styles.${name})}`);
     rewritten++;
   });
 
-  if (!rewritten) return { file, written: false, rewritten: 0, skipped, reason: 'nothing-convertible' };
+  if (!rewritten)
+    return { file, written: false, rewritten: 0, skipped, reason: "nothing-convertible" };
 
   s.prepend(`import * as stylex from '@stylexjs/stylex';\n`);
   s.append(`\n\n${printCreate(namespaces)}\n`);
@@ -98,4 +108,4 @@ export function applyFile(sys: LoadedSystem, file: string, write: boolean): Appl
 
   if (write) atomicWrite(file, next);
   return { file, written: write, rewritten, skipped, diff: write ? undefined : next };
-}
+};

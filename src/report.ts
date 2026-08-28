@@ -1,5 +1,11 @@
-import { APPLICABILITY, type Applicability, type Reason, type Refusal } from './reshape.ts';
-import type { Mismatch } from './verify.ts';
+import {
+  APPLICABILITY,
+  REASONS,
+  type Applicability,
+  type Reason,
+  type Refusal,
+} from "./reshape.ts";
+import type { Mismatch } from "./verify.ts";
 
 export type Finding = {
   file: string;
@@ -16,7 +22,7 @@ export type Finding = {
 
 export type FileResult = {
   file: string;
-  verdict: 'converted' | 'partial' | 'refused' | 'unchanged';
+  verdict: "converted" | "partial" | "refused" | "unchanged";
   sites: number;
   converted: number;
   refused: number;
@@ -53,59 +59,102 @@ export const toFinding = (file: string, line: number, column: number, r: Refusal
     candidate: r.candidate,
     detail: r.detail,
     hint: r.hint,
-    rendered: `${file}:${line}:${column}: refused ${r.reason}${r.candidate ? ` "${r.candidate}"` : ''}: ${r.detail} help: ${r.hint}`,
+    rendered: `${file}:${line}:${column}: refused ${r.reason}${r.candidate ? ` "${r.candidate}"` : ""}: ${r.detail} help: ${r.hint}`,
   };
 };
 
 /** The order the work should be done in, so the summary reads as a plan. */
-const ORDER: Applicability[] = ['machine-applicable', 'has-placeholders', 'maybe-incorrect', 'unspecified'];
+const WORK_ORDER: Applicability[] = [
+  "machine-applicable",
+  "has-placeholders",
+  "maybe-incorrect",
+  "unspecified",
+];
+
+const mismatchLine = (m: Mismatch): string =>
+  `  ${m.namespace} [${m.condition}] ${m.property}: tailwind=${m.tailwind ?? "(none)"} stylex=${m.stylex ?? "(none)"}`;
+
+/** Mismatches are a hard stop, so they print before anything the agent might act on. */
+const mismatchSection = (report: Report, limit: number): string[] => {
+  const all = report.files.flatMap(f => f.mismatches);
+  const stop = all.length
+    ? " - STOP: generated StyleX does not match Tailwind. This is a tw2sx bug."
+    : "";
+  return [`DECLARATION MISMATCHES: ${all.length}${stop}`, ...all.slice(0, limit).map(mismatchLine)];
+};
+
+/** Refusal counts, grouped so the list reads as the order to work them in. */
+const refusalBreakdown = (byReason: Record<string, number>): string[] => {
+  const lines: string[] = ["", "Refusals, in the order to work them:"];
+  for (const applicability of WORK_ORDER) {
+    const rows = Object.entries(byReason)
+      .filter(([reason]) => applicabilityOf(reason) === applicability)
+      .sort((a, b) => b[1] - a[1]);
+    if (rows.length === 0) continue;
+    lines.push(`  ${applicability}`);
+    for (const [reason, n] of rows) lines.push(`    ${reason.padEnd(22)} ${String(n).padStart(4)}`);
+  }
+  return lines;
+};
+
+const findingsSection = (
+  findings: Finding[],
+  limit: number,
+  byReason: Record<string, number>,
+): string[] => {
+  if (findings.length === 0) return [];
+  const shown = findings.slice(0, limit).map(f => f.rendered);
+  const elided =
+    findings.length > limit ? [`\nShowing ${limit} of ${findings.length} refusals.`] : [];
+  return ["", ...shown, ...elided, ...refusalBreakdown(byReason)];
+};
+
+const nextStepSection = (report: Report, reportPath: string | undefined): string[] => {
+  if (reportPath === undefined) return [];
+  const first = WORK_ORDER.find(a => report.summary.byApplicability[a]);
+  const next =
+    first === undefined
+      ? []
+      : [`Next: tw2sx refusals ${reportPath} --applicability ${first} --limit 20`];
+  return ["", `Full report: ${reportPath}`, ...next];
+};
 
 /** oxlint's `agent` format: one line per finding, ~31 tokens each. The default. */
-export function renderAgent(report: Report, limit: number, reportPath?: string): string {
-  const s = report.summary;
-  const out: string[] = [];
-  // Verdict on line one - it survives truncation.
-  out.push(`${s.files} files · ${s.sites} sites · ${s.converted} converted · ${s.refused} refused`);
+export const renderAgent = (report: Report, limit: number, reportPath?: string): string => {
+  const { files, sites, converted, refused, byReason } = report.summary;
+  return [
+    // Verdict on line one - it survives truncation.
+    `${files} files · ${sites} sites · ${converted} converted · ${refused} refused`,
+    ...mismatchSection(report, limit),
+    ...findingsSection(
+      report.files.flatMap(f => f.findings),
+      limit,
+      byReason,
+    ),
+    ...nextStepSection(report, reportPath),
+  ].join("\n");
+};
 
-  // Mismatches are a hard stop, so they come before anything the agent might act on.
-  const mism = report.files.flatMap((f) => f.mismatches);
-  out.push(`DECLARATION MISMATCHES: ${mism.length}${mism.length ? ' - STOP: generated StyleX does not match Tailwind. This is a tw2sx bug.' : ''}`);
-  for (const m of mism.slice(0, limit))
-    out.push(`  ${m.namespace} [${m.condition}] ${m.property}: tailwind=${m.tailwind ?? '(none)'} stylex=${m.stylex ?? '(none)'}`);
+const isReason = (v: string): v is Reason => (REASONS as readonly string[]).includes(v);
 
-  const all = report.files.flatMap((f) => f.findings);
-  if (all.length) {
-    out.push('');
-    for (const f of all.slice(0, limit)) out.push(f.rendered);
-    if (all.length > limit) out.push(`\nShowing ${limit} of ${all.length} refusals.`);
-
-    out.push('');
-    out.push('Refusals, in the order to work them:');
-    for (const app of ORDER) {
-      const rows = Object.entries(s.byReason)
-        .filter(([r]) => applicabilityOf(r) === app)
-        .sort((a, b) => b[1] - a[1]);
-      if (!rows.length) continue;
-      out.push(`  ${app}`);
-      for (const [reason, n] of rows) out.push(`    ${reason.padEnd(22)} ${String(n).padStart(4)}`);
-    }
-  }
-
-  if (reportPath) {
-    out.push('');
-    out.push(`Full report: ${reportPath}`);
-    const first = ORDER.find((a) => s.byApplicability[a]);
-    if (first) out.push(`Next: tw2sx refusals ${reportPath} --applicability ${first} --limit 20`);
-  }
-  return out.join('\n');
-}
-
-const applicabilityOf = (reason: string) => APPLICABILITY[reason as Reason] ?? 'unspecified';
+const applicabilityOf = (reason: string): Applicability =>
+  isReason(reason) ? APPLICABILITY[reason] : "unspecified";
 
 /** Error envelope. Every failure is shaped the same and carries a runnable hint. */
-export type ErrorEnvelope = { ok: false; code: string; exit_code: number; message: string; hint: string };
+export type ErrorEnvelope = {
+  ok: false;
+  code: string;
+  exit_code: number;
+  message: string;
+  hint: string;
+};
 
-export const fail = (code: string, exit_code: number, message: string, hint: string): ErrorEnvelope => ({
+export const fail = (
+  code: string,
+  exit_code: number,
+  message: string,
+  hint: string,
+): ErrorEnvelope => ({
   ok: false,
   code,
   exit_code,

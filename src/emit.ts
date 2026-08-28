@@ -1,98 +1,110 @@
-import type { Resolved, CondPath } from './reshape.ts';
+import type { CondPath, Resolved } from "./reshape.ts";
 
 /** A StyleX value: a leaf, or a condition object whose `default` may be null. */
 export type SxValue = string | number | null | { [cond: string]: SxValue };
 export type SxNamespace = Record<string, SxValue>;
+type SxTree = { [cond: string]: SxValue };
 
-const isNumeric = (v: string) => /^-?\d+(\.\d+)?$/.test(v);
+const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+const NUMERIC = /^-?\d+(\.\d+)?$/;
 
-/** Turn a resolved element into a single StyleX namespace object. */
-export function toNamespace(resolved: Resolved): SxNamespace {
-  // property -> condition path -> value
-  const byProp = new Map<string, { path: CondPath; value: string }[]>();
-  for (const { path: rawPath, props } of resolved.decls.values()) {
-    const path = canonicalPath(rawPath);
-    for (const [prop, value] of props) {
-      if (!byProp.has(prop)) byProp.set(prop, []);
-      // Later writes win, so replace any earlier entry for the same condition path.
-      const list = byProp.get(prop)!;
-      const at = list.findIndex((e) => e.path.join(' ') === path.join(' '));
-      if (at >= 0) list[at] = { path, value };
-      else list.push({ path, value });
-    }
-  }
+const isTree = (v: SxValue | undefined): v is SxTree => typeof v === "object" && v !== null;
 
-  const ns: SxNamespace = {};
-  for (const [prop, entries] of byProp) {
-    const flat = entries.find((e) => e.path.length === 0);
-    const conditional = entries.filter((e) => e.path.length > 0);
-    if (!conditional.length) {
-      ns[prop] = lit(flat!.value);
-      continue;
-    }
-    const tree: { [c: string]: SxValue } = { default: flat ? lit(flat.value) : null };
-    for (const { path, value } of conditional) insert(tree, path, lit(value));
-    ns[prop] = tree;
-  }
-  return ns;
-}
-
-function insert(node: { [c: string]: SxValue }, path: CondPath, value: SxValue) {
-  const [head, ...rest] = path;
-  if (!rest.length) {
-    const existing = node[head];
-    // Never clobber an already-nested branch with a scalar; keep it as that branch's default.
-    if (existing && typeof existing === 'object') (existing as { [c: string]: SxValue }).default = value;
-    else node[head] = value;
-    return;
-  }
-  const existing = node[head];
-  const child: { [c: string]: SxValue } =
-    existing && typeof existing === 'object'
-      ? (existing as { [c: string]: SxValue })
-      : // A scalar already here is the value when only the outer condition holds.
-        { default: existing === undefined ? null : existing };
-  insert(child, rest, value);
-  node[head] = child;
-}
+/** Unitless numbers stay numbers; StyleX reads a bare number as px for length properties. */
+const literal = (v: string): SxValue => (NUMERIC.test(v) ? Number(v) : v);
 
 /**
- * StyleX allows only one level of nesting inside a condition, so every selector
- * fragment on a path collapses into a single compound key; at-rules stay nested.
+ * StyleX allows one level of nesting inside a condition, so every selector fragment on a
+ * path collapses into a single compound key while at-rules stay nested.
  * ['[data-disabled]', '[data-checked]', ':hover', '@media (hover: hover)']
  *   -> ['[data-disabled][data-checked]:hover', '@media (hover: hover)']
  */
-export function canonicalPath(path: CondPath): CondPath {
-  const selectors: string[] = [];
-  const atRules: string[] = [];
-  for (const seg of path) (seg.startsWith('@') ? atRules : selectors).push(seg);
-  const combined = selectors.join('');
+export const canonicalPath = (path: CondPath): CondPath => {
+  const selectors = path.filter(seg => !seg.startsWith("@"));
+  const atRules = path.filter(seg => seg.startsWith("@"));
+  const combined = selectors.join("");
   return combined ? [combined, ...atRules] : atRules;
-}
+};
 
-const lit = (v: string): SxValue => (isNumeric(v) ? Number(v) : v);
+const insert = (node: SxTree, path: CondPath, value: SxValue): void => {
+  const [head, ...rest] = path;
+  if (head === undefined) return;
+  const existing = node[head];
 
-/** Serialise a namespace map to `stylex.create({...})` source. */
-export function printCreate(namespaces: Record<string, SxNamespace>, varName = 'styles'): string {
+  if (rest.length === 0) {
+    // Never clobber an already-nested branch with a scalar; it becomes that branch's default.
+    if (isTree(existing)) existing.default = value;
+    else node[head] = value;
+    return;
+  }
+
+  // A scalar already here is the value for when only the outer condition holds.
+  const child: SxTree = isTree(existing) ? existing : { default: existing ?? null };
+  insert(child, rest, value);
+  node[head] = child;
+};
+
+type Entry = { path: CondPath; value: string };
+
+/** property -> every (condition path, value) that applies to it, in application order. */
+const groupByProperty = (resolved: Resolved): Map<string, Entry[]> => {
+  const byProp = new Map<string, Entry[]>();
+  for (const { path: rawPath, props } of resolved.decls.values()) {
+    const path = canonicalPath(rawPath);
+    const key = path.join(" ");
+    for (const [prop, value] of props) {
+      const entries = byProp.get(prop) ?? [];
+      // Later writes win, so replace any earlier entry for the same condition path.
+      const at = entries.findIndex(e => e.path.join(" ") === key);
+      if (at >= 0) entries[at] = { path, value };
+      else entries.push({ path, value });
+      byProp.set(prop, entries);
+    }
+  }
+  return byProp;
+};
+
+const toValue = (entries: Entry[]): SxValue => {
+  const flat = entries.find(e => e.path.length === 0);
+  const conditional = entries.filter(e => e.path.length > 0);
+  if (conditional.length === 0) return literal(flat?.value ?? "");
+
+  const tree: SxTree = { default: flat ? literal(flat.value) : null };
+  for (const { path, value } of conditional) insert(tree, path, literal(value));
+  return tree;
+};
+
+/** Turn a resolved element into a single StyleX namespace object. */
+export const toNamespace = (resolved: Resolved): SxNamespace => {
+  const ns: SxNamespace = {};
+  for (const [prop, entries] of groupByProperty(resolved)) ns[prop] = toValue(entries);
+  return ns;
+};
+
+const key = (k: string): string => (IDENT.test(k) ? k : JSON.stringify(k));
+
+const printValue = (value: SxValue, indent: number): string => {
+  if (value === null) return "null";
+  if (typeof value === "number") return String(value);
+  if (typeof value === "string") return JSON.stringify(value);
+  return printObject(value, indent);
+};
+
+const printObject = (obj: SxTree | SxNamespace, indent: number): string => {
+  const pad = " ".repeat(indent + 2);
+  const lines = Object.entries(obj).map(
+    entry => `${pad}${key(entry[0])}: ${printValue(entry[1], indent + 2)},`,
+  );
+  return `{\n${lines.join("\n")}\n${" ".repeat(indent)}}`;
+};
+
+/** Serialise namespaces to `stylex.create({...})` source. */
+export const printCreate = (
+  namespaces: Record<string, SxNamespace>,
+  varName = "styles",
+): string => {
   const body = Object.entries(namespaces)
-    .map(([name, ns]) => `  ${key(name)}: ${printObj(ns, 2)},`)
-    .join('\n');
+    .map(entry => `  ${key(entry[0])}: ${printObject(entry[1], 2)},`)
+    .join("\n");
   return `const ${varName} = stylex.create({\n${body}\n});`;
-}
-
-function printObj(obj: Record<string, SxValue>, indent: number): string {
-  const pad = ' '.repeat(indent + 2);
-  const close = ' '.repeat(indent);
-  const lines = Object.entries(obj).map(([k, v]) => `${pad}${key(k)}: ${printVal(v, indent + 2)},`);
-  return `{\n${lines.join('\n')}\n${close}}`;
-}
-
-function printVal(v: SxValue, indent: number): string {
-  if (v === null) return 'null';
-  if (typeof v === 'number') return String(v);
-  if (typeof v === 'string') return JSON.stringify(v);
-  return printObj(v, indent);
-}
-
-const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const key = (k: string) => (IDENT.test(k) ? k : JSON.stringify(k));
+};

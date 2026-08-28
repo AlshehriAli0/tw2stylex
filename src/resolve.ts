@@ -1,6 +1,8 @@
-import { createRequire } from 'node:module';
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
+
+import { cjsDefault, isRecord, requireExport } from "./interop.ts";
 
 /**
  * Loads the *project's own* Tailwind design system, so `@theme`, `@utility`,
@@ -8,125 +10,181 @@ import path from 'node:path';
  * bundle a stock theme.css and silently resolve project tokens to stock values.
  */
 export type DesignSystem = {
-  candidatesToCss(classes: string[]): (string | null)[];
-  candidatesToAst(classes: string[]): unknown[][];
-  getClassOrder(classes: string[]): [string, bigint | null][];
-  parseCandidate(candidate: string): readonly unknown[];
-  resolveThemeValue(path: string, forceInline?: boolean): string | undefined;
+  candidatesToCss: (classes: string[]) => Array<string | null>;
+  getClassOrder: (classes: string[]) => Array<[string, bigint | null]>;
+  resolveThemeValue: (path: string, forceInline?: boolean) => string | undefined;
 };
 
 export type LoadedSystem = { ds: DesignSystem; entry: string; base: string; version: string };
 
-const splitPkg = (id: string) => {
-  const parts = id.split('/');
-  const n = id.startsWith('@') ? 2 : 1;
-  return { pkg: parts.slice(0, n).join('/'), rest: parts.slice(n).join('/') };
+type PackageMeta = {
+  exports?: unknown;
+  style?: unknown;
+  main?: unknown;
+  version?: unknown;
+};
+
+const asString = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+
+/** Split "@scope/pkg/sub/path" into its package name and the remainder. */
+const splitSpecifier = (id: string): { pkg: string; rest: string } => {
+  const parts = id.split("/");
+  const nameLength = id.startsWith("@") ? 2 : 1;
+  return { pkg: parts.slice(0, nameLength).join("/"), rest: parts.slice(nameLength).join("/") };
 };
 
 /** Pick a CSS file out of an exports entry, honouring the `style` condition. */
-function cssFromExports(entry: unknown): string | undefined {
-  if (typeof entry === 'string') return entry.endsWith('.css') ? entry : undefined;
-  if (entry && typeof entry === 'object') {
-    const e = entry as Record<string, unknown>;
-    for (const key of ['style', 'default', 'import', 'require']) {
-      const hit = cssFromExports(e[key]);
-      if (hit) return hit;
-    }
+const cssFromExports = (entry: unknown): string | undefined => {
+  if (typeof entry === "string") return entry.endsWith(".css") ? entry : undefined;
+  if (!isRecord(entry)) return undefined;
+  for (const key of ["style", "default", "import", "require"]) {
+    const hit = cssFromExports(entry[key]);
+    if (hit !== undefined) return hit;
   }
   return undefined;
-}
+};
 
-function makeResolver(base: string) {
-  const require = createRequire(path.join(base, '__tw2sx__.js'));
+const readPackageMeta = (root: string): PackageMeta => {
+  const parsed: unknown = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  return isRecord(parsed) ? parsed : {};
+};
+
+const firstExisting = (root: string, candidates: Array<string | undefined>): string | undefined => {
+  for (const candidate of candidates) {
+    if (candidate === undefined) continue;
+    const file = path.join(root, candidate);
+    if (fs.existsSync(file)) return file;
+  }
+  return undefined;
+};
+
+type Resolver = {
+  require: NodeJS.Require;
+  packageRoot: (pkg: string) => string;
+  resolveCss: (id: string, from: string) => string;
+};
+
+const makeResolver = (base: string): Resolver => {
+  const req = createRequire(path.join(base, "__tw2sx__.js"));
 
   /**
    * Locate a package's directory. `require.resolve('pkg/package.json')` fails on packages
-   * whose `exports` map does not list it (Node enforces this; Bun does not), so walk
-   * node_modules directly.
+   * whose `exports` map omits it (Node enforces this; Bun does not), so walk node_modules.
    */
-  function pkgRoot(pkg: string): string {
-    for (const dir of require.resolve.paths(pkg) ?? []) {
+  const packageRoot = (pkg: string): string => {
+    for (const dir of req.resolve.paths(pkg) ?? []) {
       const candidate = path.join(dir, pkg);
-      if (fs.existsSync(path.join(candidate, 'package.json'))) return candidate;
+      if (fs.existsSync(path.join(candidate, "package.json"))) return candidate;
     }
-    // Fall back to whatever the main entry resolves to and walk up to its package.json.
-    let cur = path.dirname(require.resolve(pkg));
+    // Fall back to the main entry and walk up to its package.json.
+    let cur = path.dirname(req.resolve(pkg));
     for (let i = 0; i < 8; i++) {
-      if (fs.existsSync(path.join(cur, 'package.json'))) return cur;
+      if (fs.existsSync(path.join(cur, "package.json"))) return cur;
       const next = path.dirname(cur);
       if (next === cur) break;
       cur = next;
     }
     throw new Error(`cannot locate package "${pkg}" from ${base}`);
-  }
+  };
+
+  const resolveRelative = (id: string, from: string): string => {
+    const file = path.resolve(from, id);
+    if (fs.existsSync(file) && fs.statSync(file).isDirectory()) return path.join(file, "index.css");
+    if (!fs.existsSync(file) && fs.existsSync(`${file}.css`)) return `${file}.css`;
+    return file;
+  };
+
+  /** A subpath import like "pkg/theme.css" or "pkg/prefix". */
+  const resolveSubpath = (root: string, meta: PackageMeta, rest: string): string => {
+    const direct = path.join(root, rest);
+    if (fs.existsSync(direct)) return direct;
+    const exportsMap = isRecord(meta.exports) ? meta.exports : {};
+    const viaExports = cssFromExports(exportsMap[`./${rest}`]);
+    if (viaExports !== undefined) return path.join(root, viaExports);
+    if (fs.existsSync(`${direct}.css`)) return `${direct}.css`;
+    return direct;
+  };
+
+  /** A bare package import: exports["."] with a `style` condition, then style/main, then index.css. */
+  const resolvePackageRootCss = (id: string, root: string, meta: PackageMeta): string => {
+    const exportsMap = isRecord(meta.exports) ? meta.exports : {};
+    const mainCss = asString(meta.main);
+    const file = firstExisting(root, [
+      cssFromExports(exportsMap["."]) ?? cssFromExports(meta.exports),
+      asString(meta.style),
+      mainCss?.endsWith(".css") === true ? mainCss : undefined,
+      "index.css",
+    ]);
+    if (file === undefined) throw new Error(`no stylesheet found for "${id}" (looked in ${root})`);
+    return file;
+  };
 
   /** Resolve a stylesheet specifier the way a CSS bundler would. */
-  function resolveCss(id: string, from: string): string {
-    if (id.startsWith('.') || path.isAbsolute(id)) {
-      let f = path.resolve(from, id);
-      if (fs.existsSync(f) && fs.statSync(f).isDirectory()) f = path.join(f, 'index.css');
-      if (!fs.existsSync(f) && fs.existsSync(f + '.css')) f += '.css';
-      return f;
-    }
-    const { pkg, rest } = splitPkg(id);
-    const root = pkgRoot(pkg);
-    const meta = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const resolveCss = (id: string, from: string): string => {
+    if (id.startsWith(".") || path.isAbsolute(id)) return resolveRelative(id, from);
+    const { pkg, rest } = splitSpecifier(id);
+    const root = packageRoot(pkg);
+    const meta = readPackageMeta(root);
+    return rest ? resolveSubpath(root, meta, rest) : resolvePackageRootCss(id, root, meta);
+  };
 
-    // A subpath that is already a file (e.g. "pkg/style.css").
-    if (rest) {
-      const direct = path.join(root, rest);
-      if (fs.existsSync(direct)) return direct;
-      const viaExports = cssFromExports(meta.exports?.[`./${rest}`]);
-      if (viaExports) return path.join(root, viaExports);
-      if (fs.existsSync(direct + '.css')) return direct + '.css';
-      return direct;
-    }
-    // Package root: exports["."] with a `style` condition, then style/main, then index.css.
-    const candidates = [
-      cssFromExports(meta.exports?.['.']) ?? cssFromExports(meta.exports),
-      typeof meta.style === 'string' ? meta.style : undefined,
-      typeof meta.main === 'string' && meta.main.endsWith('.css') ? meta.main : undefined,
-      'index.css',
-    ].filter(Boolean) as string[];
-    for (const c of candidates) {
-      const f = path.join(root, c);
-      if (fs.existsSync(f)) return f;
-    }
-    throw new Error(`no stylesheet found for "${id}" (looked in ${root})`);
-  }
+  return { require: req, packageRoot, resolveCss };
+};
 
-  return { require, resolveCss, pkgRoot };
-}
+type LoadDesignSystemFn = (
+  css: string,
+  opts: {
+    base: string;
+    loadStylesheet: (
+      id: string,
+      from: string,
+    ) => Promise<{ path: string; base: string; content: string }>;
+    loadModule: (
+      id: string,
+      from: string,
+      kind: string,
+    ) => Promise<{ path: string; base: string; module: unknown }>;
+  },
+) => Promise<DesignSystem>;
 
-export async function loadDesignSystem(entryCssPath: string): Promise<LoadedSystem> {
+const isLoadDesignSystem = (v: unknown): v is LoadDesignSystemFn => typeof v === "function";
+
+export const loadDesignSystem = async (entryCssPath: string): Promise<LoadedSystem> => {
   const entry = path.resolve(entryCssPath);
   if (!fs.existsSync(entry)) throw new Error(`entry CSS not found: ${entry}`);
   const base = path.dirname(entry);
-  const { require, resolveCss, pkgRoot } = makeResolver(base);
+  const { require: req, packageRoot, resolveCss } = makeResolver(base);
 
-  const twPath = require.resolve('tailwindcss');
-  // tailwindcss ships CJS; Node's ESM interop puts the exports under .default, Bun does not.
-  const twMod = await import(twPath);
-  const tw = typeof twMod.__unstable__loadDesignSystem === 'function' ? twMod : twMod.default;
-  if (typeof tw?.__unstable__loadDesignSystem !== 'function')
-    throw new Error(
-      `tailwindcss at ${twPath} does not export __unstable__loadDesignSystem. tw2sx needs Tailwind v4.`,
-    );
-  const version = JSON.parse(fs.readFileSync(path.join(pkgRoot('tailwindcss'), 'package.json'), 'utf8')).version;
+  const twPath = req.resolve("tailwindcss");
+  const twMod: unknown = await import(twPath);
+  const tw = requireExport(twMod, "__unstable__loadDesignSystem", `tailwindcss at ${twPath}`);
+  const load = tw.__unstable__loadDesignSystem;
+  if (!isLoadDesignSystem(load)) throw new Error(`tailwindcss at ${twPath} is not a v4 build.`);
 
-  async function loadStylesheet(id: string, from: string) {
+  const version = asString(readPackageMeta(packageRoot("tailwindcss")).version) ?? "unknown";
+
+  const loadStylesheet = async (
+    id: string,
+    from: string,
+  ): Promise<{ path: string; base: string; content: string }> => {
     const file = resolveCss(id, from);
-    return { path: file, base: path.dirname(file), content: fs.readFileSync(file, 'utf8') };
-  }
-  async function loadModule(id: string, from: string, _kind: 'plugin' | 'config') {
-    const file = id.startsWith('.') || path.isAbsolute(id) ? path.resolve(from, id) : require.resolve(id);
-    const mod = await import(file);
-    return { path: file, base: path.dirname(file), module: mod.default ?? mod };
-  }
+    return await Promise.resolve({
+      path: file,
+      base: path.dirname(file),
+      content: fs.readFileSync(file, "utf8"),
+    });
+  };
 
-  const ds = (await tw.__unstable__loadDesignSystem(fs.readFileSync(entry, 'utf8'), {
-    base, loadStylesheet, loadModule,
-  })) as DesignSystem;
+  const loadModule = async (
+    id: string,
+    from: string,
+  ): Promise<{ path: string; base: string; module: unknown }> => {
+    const file =
+      id.startsWith(".") || path.isAbsolute(id) ? path.resolve(from, id) : req.resolve(id);
+    const mod: unknown = await import(file);
+    return { path: file, base: path.dirname(file), module: cjsDefault(mod) };
+  };
 
+  const ds = await load(fs.readFileSync(entry, "utf8"), { base, loadStylesheet, loadModule });
   return { ds, entry, base, version };
-}
+};
