@@ -24,7 +24,7 @@ export type Usage = {
   skips: Skip[];
 };
 
-export type ScanResult = { usages: Usage[]; hasStyleX: boolean };
+export type ScanResult = { usages: Usage[]; hasStyleX: boolean; namesInUse: Set<string> };
 
 const MERGE_FNS = new Set(["cn", "clsx", "classnames", "twMerge", "twJoin", "cx"]);
 
@@ -252,9 +252,13 @@ export const scanFile = (code: string, filename: string): ScanResult => {
   });
 
   const usages: Usage[] = [];
+  const namesInUse = new Set<string>();
   let hasStyleX = false;
 
   traverse(ast, {
+    Identifier(p) {
+      namesInUse.add(p.node.name);
+    },
     ImportDeclaration(p) {
       if (p.node.source.value.startsWith("@stylexjs/")) hasStyleX = true;
     },
@@ -269,5 +273,5 @@ export const scanFile = (code: string, filename: string): ScanResult => {
     },
   });
 
-  return { usages, hasStyleX };
+  return { usages, hasStyleX, namesInUse };
 };

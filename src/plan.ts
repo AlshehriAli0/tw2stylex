@@ -4,7 +4,7 @@ import { convert } from "./convert.ts";
 import { printCreate, type Style } from "./css-to-stylex.ts";
 import { toSkipLine, type FileResult, type Report } from "./report.ts";
 import { scanFile } from "./scan-file.ts";
-import { styleNameFor } from "./style-name.ts";
+import { styleNameFor, styleObjectName } from "./style-name.ts";
 import { loadDesignSystem, type LoadedSystem } from "./tailwind.ts";
 
 const verdictFor = (total: number, converted: number, skipped: number): FileResult["verdict"] => {
@@ -15,7 +15,7 @@ const verdictFor = (total: number, converted: number, skipped: number): FileResu
 };
 
 export const processFile = (sys: LoadedSystem, file: string): FileResult => {
-  const { usages } = scanFile(fs.readFileSync(file, "utf8"), file);
+  const { usages, namesInUse } = scanFile(fs.readFileSync(file, "utf8"), file);
   const lines: FileResult["skips"] = [];
   const mismatches: FileResult["mismatches"] = [];
   const styles: Record<string, Style> = {};
@@ -44,7 +44,8 @@ export const processFile = (sys: LoadedSystem, file: string): FileResult => {
     usages: total,
     converted,
     skipped,
-    source: Object.keys(styles).length > 0 ? printCreate(styles) : undefined,
+    source:
+      Object.keys(styles).length > 0 ? printCreate(styles, styleObjectName(namesInUse)) : undefined,
     skips: lines,
     mismatches,
   };

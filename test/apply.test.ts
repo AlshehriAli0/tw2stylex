@@ -296,3 +296,35 @@ describe("the dirty-tree guard reads real git state", () => {
     }
   });
 });
+
+describe("the generated style object never collides with the file's own names", () => {
+  test("a component with a styles prop still gets working styles", () => {
+    const file = write(
+      "shadowed.tsx",
+      `export const A = ({ styles }: { styles: string[] }) => <div className="flex p-4">{styles.length}</div>;\n`,
+    );
+    applyFile(sys, file, true);
+    const out = fs.readFileSync(file, "utf8");
+
+    expect(out).toContain("const tw2sxStyles = stylex.create({");
+    expect(out).toContain("stylex.props(tw2sxStyles.el1)");
+    expect(out).not.toContain("stylex.props(styles.");
+  });
+
+  test("plan reports the same object name apply writes", () => {
+    const file = write(
+      "shadowed2.tsx",
+      `export const A = ({ styles }: { styles: string[] }) => <div className="flex">{styles.length}</div>;\n`,
+    );
+    const planned = processFile(sys, file);
+    applyFile(sys, file, true);
+    expect(planned.source).toContain("const tw2sxStyles = stylex.create({");
+    expect(fs.readFileSync(file, "utf8")).toContain("stylex.props(tw2sxStyles.el1)");
+  });
+
+  test("an unrelated file keeps the plain name", () => {
+    const file = write("plain.tsx", `export const A = () => <div className="flex" />;\n`);
+    applyFile(sys, file, true);
+    expect(fs.readFileSync(file, "utf8")).toContain("const styles = stylex.create({");
+  });
+});

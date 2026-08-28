@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { Usage, UsageKind } from "../src/scan-file.ts";
-import { styleNameFor } from "../src/style-name.ts";
+import { styleNameFor, styleObjectName } from "../src/style-name.ts";
 
 const usage = (kind: UsageKind, over: Partial<Usage> = {}): Usage => ({
   classNames: ["flex"],
@@ -93,5 +93,24 @@ describe("names never collide", () => {
         styleNameFor(usage("cva-variant", { variantAxis: axis, variantValue: value }), 0, used),
       ).toMatch(/^[A-Za-z_$][A-Za-z0-9_$]*$/);
     }
+  });
+});
+
+describe("the style object avoids names the file already uses", () => {
+  test("a file with no clash gets the obvious name", () => {
+    expect(styleObjectName(new Set(["React", "cn"]))).toBe("styles");
+  });
+
+  // A component with a `styles` prop shadows a module-level `const styles`, so
+  // `stylex.props(styles.el1)` reads the prop and every style silently vanishes.
+  test("a file that already binds styles gets a different one", () => {
+    expect(styleObjectName(new Set(["styles"]))).toBe("tw2sxStyles");
+  });
+
+  test("both taken keeps counting", () => {
+    expect(styleObjectName(new Set(["styles", "tw2sxStyles"]))).toBe("tw2sxStyles2");
+    expect(styleObjectName(new Set(["styles", "tw2sxStyles", "tw2sxStyles2"]))).toBe(
+      "tw2sxStyles3",
+    );
   });
 });

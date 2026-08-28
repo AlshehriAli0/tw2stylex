@@ -8,7 +8,7 @@ import MagicString from "magic-string";
 import { convert } from "./convert.ts";
 import { printCreate, type Style } from "./css-to-stylex.ts";
 import { scanFile, type Usage } from "./scan-file.ts";
-import { styleNameFor } from "./style-name.ts";
+import { styleNameFor, styleObjectName } from "./style-name.ts";
 import type { LoadedSystem } from "./tailwind.ts";
 
 export type ApplyFileResult = {
@@ -53,11 +53,12 @@ const writeViaTempFile = (file: string, content: string): void => {
 
 export const applyFile = (sys: LoadedSystem, file: string, write: boolean): ApplyFileResult => {
   const code = fs.readFileSync(file, "utf8");
-  const { usages, hasStyleX } = scanFile(code, file);
+  const { usages, hasStyleX, namesInUse } = scanFile(code, file);
 
   if (hasStyleX)
     return { file, written: false, rewritten: 0, skipped: usages.length, reason: "already-stylex" };
 
+  const objectName = styleObjectName(namesInUse);
   const edits = new MagicString(code);
   const styles: Record<string, Style> = {};
   const used = new Set<string>();
@@ -75,7 +76,7 @@ export const applyFile = (sys: LoadedSystem, file: string, write: boolean): Appl
       return;
     }
     styles[name] = result.style;
-    edits.update(range[0], range[1], `{...stylex.props(styles.${name})}`);
+    edits.update(range[0], range[1], `{...stylex.props(${objectName}.${name})}`);
     rewritten += 1;
   });
 
@@ -83,7 +84,7 @@ export const applyFile = (sys: LoadedSystem, file: string, write: boolean): Appl
     return { file, written: false, rewritten: 0, skipped, reason: "nothing-convertible" };
 
   edits.prepend(`import * as stylex from '@stylexjs/stylex';\n`);
-  edits.append(`\n\n${printCreate(styles)}\n`);
+  edits.append(`\n\n${printCreate(styles, objectName)}\n`);
   const next = edits.toString();
 
   if (write) writeViaTempFile(file, next);

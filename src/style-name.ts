@@ -25,3 +25,13 @@ export const styleNameFor = (usage: Usage, index: number, used: Set<string>): st
   used.add(name);
   return name;
 };
+
+const PREFERRED = ["styles", "tw2sxStyles"];
+
+export const styleObjectName = (namesInUse: Set<string>): string => {
+  const free = PREFERRED.find(name => !namesInUse.has(name));
+  if (free !== undefined) return free;
+  let n = 2;
+  while (namesInUse.has(`tw2sxStyles${n}`)) n += 1;
+  return `tw2sxStyles${n}`;
+};
