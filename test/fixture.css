@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-primary: rgb(var(--primary));
+  --color-accent: rgb(var(--accent));
+}
+
+@theme {
+  --color-brand: #5b7ae8;
+  --radius: 0.5rem;
+}
