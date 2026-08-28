@@ -1,14 +1,14 @@
 # Reason codes
 
-Every site `tw2sx` refuses carries one of these. The list is closed — if you see a code that is
+Every usage `tw2sx` skips carries one of these. The list is closed — if you see a code that is
 not here, the tool is newer than this file.
 
-Verify your fix by re-running `tw2sx plan <path>`. The refusal should disappear and
-`DECLARATION MISMATCHES` must stay at 0.
+Verify your fix by re-running `tw2sx plan <path>`. The skip should disappear and
+`MISMATCHES` must stay at 0.
 
 ---
 
-## `marker-class` — machine-applicable
+## `marker-class` — safe
 
 `group`, `peer`, `group/name`, `peer/name`. Not utilities: they mark an element so *other*
 elements can react to its state.
@@ -38,12 +38,12 @@ from a `.stylex.ts` file — the compiler hashes it by file path plus export nam
 export const cardMarker = stylex.defineMarker();
 ```
 
-Then `stylex.when.ancestor(':hover', cardMarker)`. Fix the `marker-class` refusal and the
-matching `sibling-variant` refusals together — they are two halves of one change.
+Then `stylex.when.ancestor(':hover', cardMarker)`. Fix the `marker-class` skip and the
+matching `sibling-state` skips together — they are two halves of one change.
 
 ---
 
-## `sibling-variant` — has-placeholders
+## `sibling-state` — needs-lookup
 
 `group-hover:`, `peer-checked:`, and friends. The element reacts to a *marked* ancestor or
 sibling. Requires StyleX ≥ 0.18 for attribute selectors inside `when.*`.
@@ -61,7 +61,7 @@ named marker, or the style silently never applies. `anySibling`/`siblingAfter` c
 
 ---
 
-## `ancestor-state` — has-placeholders
+## `parent-state` — needs-lookup
 
 The element matches only under some ancestor — most often class-based dark mode, which v4
 writes as `@custom-variant dark (&:is(.dark *))`.
@@ -88,7 +88,7 @@ than `createTheme`.
 
 ---
 
-## `descendant-selector` — has-placeholders
+## `descendant-selector` — needs-lookup
 
 `[&_svg]:size-4`, `[&>*]:p-2`, `[&_svg:not([class*='size-'])]:size-4`. StyleX styles one element
 and hard-errors on descendant selectors. There is no escape hatch.
@@ -99,7 +99,7 @@ and hard-errors on descendant selectors. There is no escape hatch.
 // before
 <button className="[&_svg]:size-4 [&_svg]:shrink-0">{icon}</button>
 
-// after — the icon gets its own namespace
+// after — the icon gets its own style
 <button {...stylex.props(styles.button)}>
   <Icon {...stylex.props(styles.icon)} />
 </button>
@@ -112,13 +112,13 @@ that one rule. If none fit, the rule stays and goes in your summary.
 
 ---
 
-## `child-styling-utility` — maybe-incorrect
+## `styles-children` — check-first
 
 `space-x-*`, `space-y-*`, `divide-*`. These style *children* via `> :not(:last-child)`.
 
 `space-y-4` → `{ display: 'flex', flexDirection: 'column', gap: 16 }` on the **parent**.
 
-**Why maybe-incorrect:** `gap` and `space-y` are not equivalent. `space-y` adds a margin between
+**Why check-first:** `gap` and `space-y` are not equivalent. `space-y` adds a margin between
 adjacent children and does nothing to a wrapping row; `gap` applies to every gap including
 across wrapped lines, and it requires flex or grid. If the parent is a plain block container
 with `hidden` children, the two differ visibly. Check the parent's display before converting.
@@ -128,18 +128,12 @@ with `hidden` children, the two differ visibly. Check the parent's display befor
 
 ---
 
-## `banned-shorthand` — machine-applicable
+## `dropped-shorthand` — safe
 
-Split into longhands (SKILL.md lists all twelve).
+Split into longhands. The skip's hint names them for the class in front of you; SKILL.md lists
+all fourteen shorthands.
 
-| Tailwind emits | Write instead |
-|---|---|
-| `background` | `backgroundColor` / `backgroundImage` |
-| `border` | `borderWidth` + `borderStyle` + `borderColor` |
-| `animation` (`animate-*`, `animate-in`) | `stylex.keyframes()` + `animationName` + `animationDuration` + … |
-| `borderTop`/`Right`/`Bottom`/`Left` | `borderTopWidth` + `borderTopStyle` + `borderTopColor` |
-
-For `animate-*`, define the keyframes explicitly:
+`animate-*` is the one that needs more than a rename — define the keyframes:
 
 ```js
 const spin = stylex.keyframes({ from: { transform: 'rotate(0)' }, to: { transform: 'rotate(360deg)' } });
@@ -154,12 +148,12 @@ attribute than to a keyframe.
 
 ---
 
-## `dynamic-expression` — maybe-incorrect
+## `dynamic-classes` — check-first
 
 A class string built at runtime: a ternary, `&&`, a template literal with interpolation, an
 object map, or a call to something that is not a known merge helper.
 
-Lift the condition out of the string and apply a namespace conditionally — `stylex.props`
+Lift the condition out of the string and apply a style conditionally — `stylex.props`
 ignores falsy arguments:
 
 ```tsx
@@ -180,7 +174,7 @@ need. **Interpolated values** (`` `text-[${color}]` ``) need a dynamic style fun
 
 ---
 
-## `contract-change` — maybe-incorrect
+## `passed-in-classes` — check-first
 
 A variable — almost always a `className` prop — flows into a class string. Converting the
 component changes its public API, so this is never safe to do silently.
@@ -191,7 +185,7 @@ while unmigrated callers still pass strings. Full pattern in
 
 ---
 
-## `unknown-candidate` — unspecified
+## `unknown-class` — unknown
 
 Tailwind itself does not recognise the class *in this project's design system*.
 
@@ -205,13 +199,13 @@ different, so a near-miss guess ships a design change.
 
 ---
 
-## `conflicting-props` — maybe-incorrect
+## `two-style-sources` — check-first
 
 The element carries both a `className` and its own `style` attribute. StyleX's
-`no-conflicting-props` rule forbids an element having a `stylex.props()` spread alongside either
+`no-two-style-sources` rule forbids an element having a `stylex.props()` spread alongside either
 one — whichever is written second wins and the other silently does nothing.
 
-If the inline style is static, fold it into the namespace. If it is genuinely dynamic, use a
+If the inline style is static, fold it into the style. If it is genuinely dynamic, use a
 dynamic style function and pass it through `stylex.props` so there is still only one source:
 
 ```tsx
@@ -228,7 +222,7 @@ const styles = stylex.create({
 
 ---
 
-## `unresolved-tw-var` — maybe-incorrect
+## `unresolved-variable` — check-first
 
 A `--tw-*` slot survived resolution with no value and no `@property` initial value. Tailwind
 composes `box-shadow`, `filter`, `backdrop-filter` and `transform` from several classes at once;
@@ -239,7 +233,7 @@ this when it can — reaching this code usually means a class is applied conditi
 
 ---
 
-## `unsupported-at-rule` — has-placeholders
+## `unsupported-at-rule` — needs-lookup
 
 An at-rule with no StyleX condition form, e.g. `@starting-style` from `starting:*`. Supported
 at-rules are `@media`, `@supports` and `@container` (including named containers). Move anything
@@ -247,20 +241,48 @@ else to a plain CSS file.
 
 ---
 
-## `condition-erasure` — maybe-incorrect
+## `lost-condition` — check-first
 
-The generated StyleX compiled, but its declarations did not match Tailwind's — typically
-**erasure**: composing namespaces flattened a condition away (see SKILL.md).
+The generated StyleX compiled, but its declarations did not match Tailwind's — typically the overwriting problem: combining styles flattened a condition away (see SKILL.md).
 
 Read the `mismatches` array in the JSON report: it names the exact
-`(namespace, condition, property)` and both values. Fold the lost condition into the overriding
-namespace, or restructure so the two namespaces do not both set that property.
+`(style, condition, property)` and both values. Fold the lost condition into the overriding
+style, or restructure so the two styles do not both set that property.
 
 ---
 
-## `cva-call` — machine-applicable
+## `variant-function` — safe
 
 A call to a `cva()`-produced function `tw2sx` could not resolve to its definition, usually
 because the definition sits in another file. Run `tw2sx plan` over the defining file too — the
-converted namespaces are emitted there. Conversion recipe in
+converted styles are emitted there. Conversion recipe in
 [component-api.md](./component-api.md).
+
+---
+
+## `important-modifier` — needs-lookup
+
+Tailwind's `!` modifier (`p-4!`, v3's `!p-4`) emits `!important`, which StyleX has no form for.
+
+**Placeholder to find:** whatever the `!` was written to beat — a vendor stylesheet, a base or
+reset rule, or a competing utility on the same element. Finding it is the whole job: the style
+compiles and looks right in isolation either way, so a wrong call surfaces only on the page
+where it mattered.
+
+With it in hand, one of two applies:
+
+- **It is being migrated too** → drop the `!` and pass this style last to `stylex.props()`.
+- **It stays outside StyleX** → the `!important` is load-bearing. Keep that one declaration in
+  plain CSS and note it in your summary.
+
+---
+
+## `stylex-compile-error` — unknown
+
+The StyleX we generated does not compile. **This is a tw2sx bug.** The detail carries the
+compiler's own message.
+
+Two moves, both of them: convert that one usage by hand from the Tailwind classes, and report
+the class string that caused it. Working from the classes rather than from the broken output is
+the point — what tw2sx produced is wrong at the source, so a patch that makes it compile ships
+the wrong styles and hides the bug from the next person.

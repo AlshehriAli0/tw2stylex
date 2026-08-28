@@ -1,21 +1,27 @@
 # tw2sx
 
-Migrate Tailwind v4 to StyleX. Converts what it can prove; refuses the rest and tells an agent
-exactly what to do about each refusal.
+Migrate Tailwind v4 to StyleX. Converts what it can prove; skips the rest and tells an agent
+exactly what to do about each skip.
 
 ```
 tw2sx plan src/components/ui
-50 files · 347 sites · 292 converted · 55 refused
+50 files · 347 usages · 126 converted · 221 skipped
+MISMATCHES: 0
 
-src/ui/button.tsx:12:5: refused descendant-selector "[&_svg]:size-4": … help: Style the child directly.
+src/ui/button.tsx:12:5: skipped descendant-selector "[&_svg]:size-4": … fix: Style the child directly.
 
-Refusals by reason:
-  contract-change         154  (maybe-incorrect)
-  descendant-selector      89  (has-placeholders)
-  banned-shorthand         36  (machine-applicable)
+Skipped, in the order to work them:
+  safe
+    dropped-shorthand         27
+    marker-class              20
+  needs-lookup
+    parent-state             104
+    descendant-selector       89
+  check-first
+    passed-in-classes        154
 
 Full report: .tw2sx/plan-3d35e4.json
-Next: tw2sx refusals .tw2sx/plan-3d35e4.json --reason descendant-selector --limit 20
+Next: tw2sx skipped .tw2sx/plan-3d35e4.json --fix safe --limit 20
 ```
 
 ## Why another one
@@ -30,7 +36,7 @@ compiler — that part is settled prior art. All three also:
   from the output with no diagnostic.
 
 Since Tailwind and StyleX are not isomorphic, a partial conversion is the only honest outcome.
-So the refusals *are* the product: a typed, enumerable list of exactly what a human or an agent
+So the skips *are* the product: a typed, enumerable list of exactly what a human or an agent
 still has to decide, with a recipe for each.
 
 ## Commands
@@ -40,9 +46,9 @@ still has to decide, with a recipe for each.
 | `tw2sx explain "<classes>"` | Resolve a class string to a StyleX object. Touches nothing. |
 | `tw2sx plan <path>` | Scan, convert, verify. Writes a JSON report. **Never edits code.** |
 | `tw2sx apply <path>` | Rewrite the sites that convert cleanly. Dry run unless `--write`. |
-| `tw2sx refusals <report.json>` | Re-read a report, filtered by `--reason` / `--applicability`. |
+| `tw2sx skipped <report.json>` | Re-read a report, filtered by `--reason` / `--fix`. |
 
-Exit codes: `0` clean · `1` completed with refusals · `2` usage · `3` precondition · `10` internal.
+Exit codes: `0` clean · `1` completed with skips · `2` usage · `3` precondition · `10` internal.
 
 ## How it works
 
@@ -56,27 +62,27 @@ Exit codes: `0` clean · `1` completed with refusals · `2` usage · `3` precond
    variants into StyleX condition objects.
 4. **Verify.** Compile the generated `stylex.create` through the real StyleX Babel plugin and
    compare declaration sets against Tailwind's. A mismatch is a hard failure.
-5. **Report.** Everything unproven becomes a typed `Refusal` with a reason, an applicability,
+5. **Report.** Everything unproven becomes a typed `Skip` with a reason, an fix,
    a location, and a hint.
 
-## Refusals
+## Skips
 
-Each carries a **reason** (why) and an **applicability** (what to do), the latter borrowed from
-rustc: `machine-applicable`, `maybe-incorrect`, `has-placeholders`, `unspecified`.
+Each carries a **reason** (why it was skipped) and a **fix** (how hard it is to resolve):
+`safe`, `needs-lookup`, `check-first`, `unknown`.
 
-Reasons: `unknown-candidate`, `marker-class`, `descendant-selector`, `ancestor-state`,
-`sibling-variant`, `child-styling-utility`, `banned-shorthand`, `unresolved-tw-var`,
-`unsupported-at-rule`, `dynamic-expression`, `cva-call`, `contract-change`, `condition-erasure`,
-`conflicting-props`.
+Reasons: `unknown-class`, `marker-class`, `descendant-selector`, `parent-state`,
+`sibling-state`, `styles-children`, `dropped-shorthand`, `unresolved-variable`,
+`unsupported-at-rule`, `dynamic-classes`, `variant-function`, `passed-in-classes`,
+`lost-condition`, `two-style-sources`, `stylex-compile-error`.
 
-The enum is closed, and [`skill/references/reason-codes.md`](skill/references/reason-codes.md)
+The list is fixed, and [`skill/references/reason-codes.md`](skill/references/reason-codes.md)
 has one hand-migration recipe per code.
 [`skill/references/tokens.md`](skill/references/tokens.md) covers `@theme` → StyleX tokens, the
 `--` variable bridge, and dark mode.
 
 ## The agent skill
 
-[`skill/SKILL.md`](skill/SKILL.md) drives the CLI and teaches the agent to work the refusals.
+[`skill/SKILL.md`](skill/SKILL.md) drives the CLI and teaches the agent to work the skips.
 Its central rule is the StyleX landmine that silently breaks migrations:
 
 ```js
@@ -90,8 +96,9 @@ bans the properties it owns from its own style prop.
 
 ## Status
 
-Verified against a real Tailwind v4 app (970 files, 7,125 style sites): **6,462 sites converted
-with zero declaration mismatches**, in ~3s, byte-identical output between Node and Bun.
+Verified against a real Tailwind v4 app (970 files, 7,125 usages): **5,563 converted with zero
+mismatches**, in ~3s, byte-identical output between Node and Bun. `plan` and `apply` agree on
+what converts, so the report never promises something `apply` will skip.
 
 `__unstable__loadDesignSystem` is exactly as unstable as it sounds — pin your Tailwind version.
 

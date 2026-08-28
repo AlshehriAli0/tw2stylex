@@ -1,12 +1,12 @@
 # Component API
 
 For components that accept styling from callers, and for `cva`. Reached from
-`contract-change`, `cva-call`, and the erasure rule in SKILL.md.
+`passed-in-classes`, `variant-function`, and the overwriting rule in SKILL.md.
 
 ## Ban the properties the component owns
 
 A component's `style` prop is typed with `StyleXStylesWithout`, listing every property the
-component sets itself. Erasure then fails to compile at the call site instead of silently
+component sets itself. Overwriting then fails to compile at the call site instead of silently
 killing a `:hover` rule at runtime.
 
 ```tsx
@@ -60,20 +60,20 @@ keeps Tailwind in the build, so treat the count of them as the migration's remai
 
 ## Converting cva
 
-`cva()` maps onto StyleX's documented variants recipe — a namespace per variant value plus a
+`cva()` maps onto StyleX's documented variants recipe — a style per variant value plus a
 lookup. There is no `stylex.variants()` API.
 
 | cva | StyleX |
 |---|---|
-| `base` string | a `base` namespace, first argument to `stylex.props` |
-| `variants.axis.value` | a namespace, selected by `variants[axis]` |
+| `base` string | a `base` style, first argument to `stylex.props` |
+| `variants.axis.value` | a style, selected by `variants[axis]` |
 | `defaultVariants` | JS default parameter values |
 | `VariantProps<typeof x>` | `keyof typeof variants` |
 | `props.className` (last) | the `style` prop, last |
 
 For **compound variants**, StyleX's docs say to pre-flatten the combination into its own
-namespace (`colorVariantsDisabled`) and select it, rather than layering a second namespace over
-the first. Layering is what triggers erasure.
+style (`colorVariantsDisabled`) and select it, rather than layering a second style over
+the first. Layering is what wipes the conditions.
 
-`tw2sx` converts cva mechanically and names namespaces from the axis and value. Plain JSX sites
+`tw2sx` converts cva mechanically and names styles from the axis and value. Plain JSX usages
 get `el1`, `el2` placeholders — rename those to what the element is while you review the file.
