@@ -23,19 +23,14 @@ const nothing = (skips: Skip[], mismatches: Mismatch[] = []): Converted => ({
 
 const lastLine = (message: string): string => message.split("\n").pop()?.trim() ?? message;
 
-/**
- * A class string converts the same way wherever it appears, and real codebases repeat themselves:
- * `size-4` and `space-y-2` show up in hundreds of files. The style key is not part of the answer,
- * so one canonical name verifies for every caller and the name is stamped back on the way out.
- */
-const CANONICAL = "s";
-const memos = new WeakMap<DesignSystem, Map<string, Converted>>();
+const SHARED_KEY = "s";
+const convertedByClasses = new WeakMap<DesignSystem, Map<string, Converted>>();
 
 const memoFor = (ds: DesignSystem): Map<string, Converted> => {
-  const found = memos.get(ds);
+  const found = convertedByClasses.get(ds);
   if (found) return found;
   const fresh = new Map<string, Converted>();
-  memos.set(ds, fresh);
+  convertedByClasses.set(ds, fresh);
   return fresh;
 };
 
@@ -71,30 +66,20 @@ const fromVerdict = (style: Style, checked: VerifyResult): Converted => {
   );
 };
 
-/** Everything a class string needs before StyleX has been asked whether it compiles. */
-type Pending = { key: string; resolved: ResolvedClasses; style: Style };
+type Unverified = { key: string; resolved: ResolvedClasses; style: Style };
 
-const prepare = (ds: DesignSystem, classes: string[]): Converted | Pending => {
+const prepare = (ds: DesignSystem, classes: string[]): Converted | Unverified => {
   const resolved = resolveClasses(ds, classes);
   if (resolved.skips.length > 0) return nothing(resolved.skips);
   if (resolved.declarations.size === 0) return nothing([]);
   return { key: classes.join(" "), resolved, style: toStyle(resolved) };
 };
 
-const isPending = (v: Converted | Pending): v is Pending => "resolved" in v;
+const isPending = (v: Converted | Unverified): v is Unverified => "resolved" in v;
 
 type Compiled = { rules: CompiledRule[] } | { error: string };
 
-/**
- * StyleX compiles a declaration into its own atomic class regardless of what sits beside it, so
- * the run only has to ask about each distinct declaration once. A codebase repeats declarations
- * far more than it repeats whole styles, and asking about the few that are new is several times
- * cheaper than recompiling every style that mentions them.
- *
- * A declaration StyleX rejects takes its whole call down, so a failed batch halves until the
- * culprit is alone. On a healthy codebase that never happens and the run costs one compile.
- */
-const compileDeclarations = (
+const compileDeclarationsHalvingOnFailure = (
   keys: string[],
   styleFor: Map<string, Style>,
   into: Map<string, Compiled>,
@@ -104,13 +89,13 @@ const compileDeclarations = (
   const batch: Record<string, Style> = {};
   keys.forEach((key, i) => {
     const style = styleFor.get(key);
-    if (style) batch[`${CANONICAL}${i}`] = style;
+    if (style) batch[`${SHARED_KEY}${i}`] = style;
   });
 
   const compiled = compileMany(batch);
   if (!("error" in compiled)) {
     keys.forEach((key, i) =>
-      into.set(key, { rules: compiled.rules.get(`${CANONICAL}${i}`) ?? [] }),
+      into.set(key, { rules: compiled.rules.get(`${SHARED_KEY}${i}`) ?? [] }),
     );
     return;
   }
@@ -122,11 +107,11 @@ const compileDeclarations = (
   }
 
   const half = Math.floor(keys.length / 2);
-  compileDeclarations(keys.slice(0, half), styleFor, into);
-  compileDeclarations(keys.slice(half), styleFor, into);
+  compileDeclarationsHalvingOnFailure(keys.slice(0, half), styleFor, into);
+  compileDeclarationsHalvingOnFailure(keys.slice(half), styleFor, into);
 };
 
-const verifyBatch = (memo: Map<string, Converted>, batch: Pending[]): void => {
+const verifyBatch = (memo: Map<string, Converted>, batch: Unverified[]): void => {
   if (batch.length === 0) return;
 
   const styleFor = new Map<string, Style>();
@@ -143,42 +128,45 @@ const verifyBatch = (memo: Map<string, Converted>, batch: Pending[]): void => {
   );
 
   const compiled = new Map<string, Compiled>();
-  compileDeclarations(order, styleFor, compiled);
+  compileDeclarationsHalvingOnFailure(order, styleFor, compiled);
 
   batch.forEach((pending, i) => {
     const keys = perStyle[i] ?? [];
-    const broken = keys.map(k => compiled.get(k)).find(c => c && "error" in c);
-    if (broken && "error" in broken) {
-      memo.set(pending.key, compileFailed(broken.error));
-      return;
-    }
-
-    const seen = new Set<string>();
-    const rules: CompiledRule[] = [];
-    for (const key of keys) {
-      const entry = compiled.get(key);
-      if (!entry || "error" in entry) continue;
-      for (const rule of entry.rules)
-        if (!seen.has(rule.className)) {
-          seen.add(rule.className);
-          rules.push(rule);
-        }
-    }
+    const failure = firstFailure(keys, compiled);
     memo.set(
       pending.key,
-      fromVerdict(pending.style, compareStyle(CANONICAL, pending.resolved, rules)),
+      failure === undefined
+        ? fromVerdict(
+            pending.style,
+            compareStyle(SHARED_KEY, pending.resolved, rulesFor(keys, compiled)),
+          )
+        : compileFailed(failure),
     );
   });
 };
 
-/**
- * Resolve and verify every class string the run will ask about, before it asks. Without this each
- * `convert` compiles alone; with it they share one compile and every later call is a memo hit.
- */
+const firstFailure = (keys: string[], compiled: Map<string, Compiled>): string | undefined => {
+  for (const key of keys) {
+    const entry = compiled.get(key);
+    if (entry && "error" in entry) return entry.error;
+  }
+  return undefined;
+};
+
+const rulesFor = (keys: string[], compiled: Map<string, Compiled>): CompiledRule[] => {
+  const byClassName = new Map<string, CompiledRule>();
+  for (const key of keys) {
+    const entry = compiled.get(key);
+    if (entry && "rules" in entry)
+      for (const rule of entry.rules) byClassName.set(rule.className, rule);
+  }
+  return [...byClassName.values()];
+};
+
 export const warmUp = (ds: DesignSystem, classStrings: Iterable<string[]>): void => {
   const memo = memoFor(ds);
   const seen = new Set(memo.keys());
-  const batch: Pending[] = [];
+  const batch: Unverified[] = [];
   for (const classes of classStrings) {
     const key = classes.join(" ");
     if (seen.has(key)) continue;
@@ -199,7 +187,7 @@ export const convert = (ds: DesignSystem, name: string, classes: string[]): Conv
 
   const prepared = prepare(ds, classes);
   const result = isPending(prepared)
-    ? fromVerdict(prepared.style, checkStyle(CANONICAL, prepared.resolved, prepared.style))
+    ? fromVerdict(prepared.style, checkStyle(SHARED_KEY, prepared.resolved, prepared.style))
     : prepared;
 
   memo.set(key, result);

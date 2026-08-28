@@ -187,16 +187,11 @@ const inTailwindOrder = (ds: DesignSystem, classNames: string[], skips: Skips): 
 
 type Roots = Array<postcss.Root | null>;
 
-/**
- * A class compiles to the same CSS wherever it appears, and a real codebase asks about the same
- * few thousand classes tens of thousands of times. The parsed rule is only ever read, so one
- * parse per class serves every usage of it.
- */
-const parsedCss = new WeakMap<DesignSystem, Map<string, postcss.Root | null>>();
+const cssByClass = new WeakMap<DesignSystem, Map<string, postcss.Root | null>>();
 
 const parsedCssFor = (ds: DesignSystem, classNames: string[]): Roots => {
-  const cache = parsedCss.get(ds) ?? new Map<string, postcss.Root | null>();
-  parsedCss.set(ds, cache);
+  const cache = cssByClass.get(ds) ?? new Map<string, postcss.Root | null>();
+  cssByClass.set(ds, cache);
 
   const missing = [...new Set(classNames)].filter(name => !cache.has(name));
   if (missing.length > 0) {
@@ -264,6 +259,26 @@ const skipForSelector = (selector: string, className: string): Skip => {
   };
 };
 
+const skipForDeclaration = (decl: Declaration, className: string): Skip | undefined => {
+  if (decl.important)
+    return {
+      reason: "important-modifier",
+      class: className,
+      detail: `"${className}" emits "${decl.prop}: ${decl.value} !important", and StyleX has no !important.`,
+      hint: "Find the rule this was written to beat. Once that rule is gone, drop the `!` and convert normally; StyleX resolves conflicts by stylex.props() argument order.",
+    };
+
+  if (BANNED_SHORTHANDS.has(decl.prop))
+    return {
+      reason: "dropped-shorthand",
+      class: className,
+      detail: `"${className}" emits the "${decl.prop}" shorthand, which StyleX drops silently.`,
+      hint: longhandsFor(decl.prop),
+    };
+
+  return undefined;
+};
+
 export const resolveClasses = (ds: DesignSystem, classNames: string[]): ResolvedClasses => {
   const skips = newSkips();
   const declarations: ResolvedClasses["declarations"] = new Map();
@@ -282,23 +297,9 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
     const isInternalSlot = decl.prop.startsWith("--tw-");
     if (isInternalSlot) return;
 
-    if (decl.important) {
-      skips.add({
-        reason: "important-modifier",
-        class: className,
-        detail: `"${className}" emits "${decl.prop}: ${decl.value} !important", and StyleX has no !important.`,
-        hint: "Find the rule this was written to beat. Once that rule is gone, drop the `!` and convert normally; StyleX resolves conflicts by stylex.props() argument order.",
-      });
-      return;
-    }
-
-    if (BANNED_SHORTHANDS.has(decl.prop)) {
-      skips.add({
-        reason: "dropped-shorthand",
-        class: className,
-        detail: `"${className}" emits the "${decl.prop}" shorthand, which StyleX drops silently.`,
-        hint: longhandsFor(decl.prop),
-      });
+    const unconvertible = skipForDeclaration(decl, className);
+    if (unconvertible) {
+      skips.add(unconvertible);
       return;
     }
 

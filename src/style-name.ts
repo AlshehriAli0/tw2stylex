@@ -28,11 +28,6 @@ export const styleNameFor = (usage: Usage, index: number, used: Set<string>): st
 
 const PREFERRED = ["styles", "tw2sxStyles"];
 
-/**
- * Only a handful of names are ever candidates, so asking the text about those beats collecting
- * every identifier in the file. A match inside a comment or a string counts as taken, which costs
- * nothing but the next name on the list.
- */
 export const nameIsTaken =
   (code: string) =>
   (name: string): boolean =>

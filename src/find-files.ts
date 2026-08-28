@@ -34,15 +34,19 @@ const ancestors = (dir: string): string[] => {
 
 const SOURCE_FILE = /\.(?:tsx|jsx|ts|js)$/;
 
+const isHidden = (name: string): boolean => name === "node_modules" || name.startsWith(".");
+
+const isSource = (name: string): boolean => SOURCE_FILE.test(name) && !name.endsWith(".d.ts");
+
 export const collectFiles = (target: string): string[] => {
   const st = fs.statSync(target);
   if (st.isFile()) return [target];
   const out: string[] = [];
   for (const e of fs.readdirSync(target, { withFileTypes: true })) {
-    if (e.name === "node_modules" || e.name.startsWith(".")) continue;
+    if (isHidden(e.name)) continue;
     const p = path.join(target, e.name);
     if (e.isDirectory()) out.push(...collectFiles(p));
-    else if (SOURCE_FILE.test(e.name) && !e.name.endsWith(".d.ts")) out.push(p);
+    else if (isSource(e.name)) out.push(p);
   }
   return out;
 };

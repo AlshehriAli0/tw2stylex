@@ -96,17 +96,23 @@ const readIdentifier = (n: t.Identifier, skips: Skip[]): string[] => {
 export const readClasses = (node: t.Node): Reader => {
   const skips: Skip[] = [];
 
-  const walk = (n: t.Node): string[] => {
+  const written = (n: t.Node): string[] | undefined => {
     if (t.isStringLiteral(n)) return splitClasses(n.value);
     if (t.isTemplateLiteral(n)) return readTemplate(n, skips);
     if (t.isArrayExpression(n)) return n.elements.flatMap(e => (e ? walk(e) : []));
     if (t.isObjectExpression(n)) return readObjectMap(n, skips);
+    return undefined;
+  };
+
+  const decidedAtRuntime = (n: t.Node): string[] | undefined => {
     if (t.isIdentifier(n)) return readIdentifier(n, skips);
     if (t.isCallExpression(n)) return walkCall(n);
     if (t.isConditionalExpression(n)) return walkTernary(n);
     if (t.isLogicalExpression(n)) return walkLogical(n);
-    return [];
+    return undefined;
   };
+
+  const walk = (n: t.Node): string[] => written(n) ?? decidedAtRuntime(n) ?? [];
 
   const walkCall = (n: t.CallExpression): string[] => {
     const name = calleeName(n.callee);
@@ -237,15 +243,10 @@ const cvaUsages = (call: t.CallExpression): Usage[] => {
   return usages;
 };
 
-/**
- * Half of a real codebase is hooks, types and utilities with no styling in them at all. Parsing
- * those costs more than reading them. Anything this misses is a file that could not have held a
- * usage, because a usage only ever comes from a class attribute or a cva() call.
- */
-const MIGHT_STYLE = /className|class\s*=|\bcva\s*\(|@stylexjs\//;
+const COULD_HOLD_A_USAGE = /className|class\s*=|\bcva\s*\(|@stylexjs\//;
 
 export const scanFile = (code: string, filename: string): ScanResult => {
-  if (!MIGHT_STYLE.test(code)) return { usages: [], hasStyleX: false };
+  if (!COULD_HOLD_A_USAGE.test(code)) return { usages: [], hasStyleX: false };
 
   const ast = parse(code, {
     sourceFilename: filename,
@@ -256,27 +257,30 @@ export const scanFile = (code: string, filename: string): ScanResult => {
 
   const usages: Usage[] = [];
   let hasStyleX = false;
-
-  /**
-   * `traverse` builds a path and a scope for every node so visitors can rewrite the tree; this
-   * one only reads it. `traverseFast` walks the same nodes and builds neither, but it also hands
-   * over no parent, so each element notes down which attributes are its own on the way past.
-   * Attributes are still handled where the walk reaches them, which keeps the usages in document
-   * order even when an attribute value holds another element.
-   */
   const elementOf = new Map<t.JSXAttribute, t.JSXOpeningElement>();
 
+  const claimAttributes = (element: t.JSXOpeningElement): void => {
+    for (const attr of element.attributes) if (t.isJSXAttribute(attr)) elementOf.set(attr, element);
+  };
+
+  const readAttribute = (attr: t.JSXAttribute): void => {
+    const usage = jsxUsage(attr, elementOf.get(attr));
+    if (usage) usages.push(usage);
+  };
+
+  const readCva = (call: t.CallExpression): void => {
+    if (calleeName(call.callee) === "cva") usages.push(...cvaUsages(call));
+  };
+
+  const readImport = (declaration: t.ImportDeclaration): void => {
+    if (declaration.source.value.startsWith("@stylexjs/")) hasStyleX = true;
+  };
+
   t.traverseFast(ast, node => {
-    if (t.isJSXOpeningElement(node)) {
-      for (const attr of node.attributes) if (t.isJSXAttribute(attr)) elementOf.set(attr, node);
-    } else if (t.isJSXAttribute(node)) {
-      const usage = jsxUsage(node, elementOf.get(node));
-      if (usage) usages.push(usage);
-    } else if (t.isCallExpression(node)) {
-      if (calleeName(node.callee) === "cva") usages.push(...cvaUsages(node));
-    } else if (t.isImportDeclaration(node)) {
-      if (node.source.value.startsWith("@stylexjs/")) hasStyleX = true;
-    }
+    if (t.isJSXOpeningElement(node)) claimAttributes(node);
+    else if (t.isJSXAttribute(node)) readAttribute(node);
+    else if (t.isCallExpression(node)) readCva(node);
+    else if (t.isImportDeclaration(node)) readImport(node);
   });
 
   return { usages, hasStyleX };

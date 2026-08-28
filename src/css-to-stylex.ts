@@ -95,11 +95,6 @@ export const printCreate = (styleMap: Record<string, Style>, varName = "styles")
 
 export type Declaration = { property: string; conditions: string[]; value: string | number | null };
 
-/**
- * A style broken into the individual declarations StyleX will compile it into. StyleX turns each
- * one into its own atomic class independently of the others, so a declaration seen in one style
- * needs no second look when it turns up in the next.
- */
 export const declarationsOf = (style: Style): Declaration[] => {
   const flat: Declaration[] = [];
 

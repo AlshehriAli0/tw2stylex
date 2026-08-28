@@ -7,10 +7,6 @@ import { isRecord } from "./cjs.ts";
 const packageRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const source = path.join(packageRoot, "skills");
 
-/**
- * One SKILL.md format, two directories. Claude Code reads `.claude/skills`; Codex, Gemini CLI
- * and the rest of the agents that adopted the format read `.agents/skills`.
- */
 export const AGENT_HOMES = [
   { home: ".claude", agents: "Claude Code" },
   { home: ".agents", agents: "Codex, Gemini CLI" },
@@ -32,7 +28,6 @@ export const skillName = (): string => {
   return only.name;
 };
 
-/** Only the homes the project already has. Creating one is a choice about which agent runs here. */
 export const homesPresent = (projectRoot: string): string[] =>
   AGENT_HOMES.map(h => h.home).filter(home => fs.existsSync(path.join(projectRoot, home)));
 

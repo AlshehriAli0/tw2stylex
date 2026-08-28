@@ -14,10 +14,6 @@ const verdictFor = (total: number, converted: number, skipped: number): FileResu
   return "partial";
 };
 
-/**
- * What survives the scan pass. The source is the largest thing a scan touches and the only thing
- * it needs from it is a free variable name, so the name is taken and the text is let go.
- */
 type Scanned = { file: string; usages: ScanResult["usages"]; objectName: string };
 
 const scanOne = (file: string): Scanned => {

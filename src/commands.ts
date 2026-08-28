@@ -37,7 +37,7 @@ export const SKIP_FIELDS = [
   "message",
 ];
 
-type Output = { json: boolean; fields: string[] | undefined; limit: number };
+export type Output = { json: boolean; fields: string[] | undefined; limit: number };
 
 export const readOutput = (args: Args): Output => {
   const raw = args.flags.get("json");
@@ -125,7 +125,7 @@ export const explainCommand = async (args: Args, out: Output): Promise<CommandRe
   const skips = result.skips.map(s => toSkipLine("<argv>", 0, 0, s));
   const source = result.style ? printCreate({ styles: result.style }) : undefined;
 
-  if (out.json) {
+  if (out.json)
     emit({
       ok: result.skips.length === 0,
       entry: sys.entry,
@@ -134,21 +134,27 @@ export const explainCommand = async (args: Args, out: Output): Promise<CommandRe
       source,
       skipped: skips,
     });
-  } else {
-    if (source !== undefined) console.log(source);
-    for (const skip of skips)
-      console.log(
-        `skipped ${skip.reason}${skip.class === undefined ? "" : ` "${skip.class}"`}: ${skip.detail}\n  fix: ${skip.hint}`,
-      );
-    console.log("");
-    console.log(
-      result.style
-        ? `checked: same declarations as Tailwind (${result.rules} atomic rules)`
-        : `not converted: ${skips.length} skipped`,
-    );
-  }
+  else printExplained(source, skips, result);
 
   return { exit: skips.length > 0 ? EXIT.SOME_SKIPPED : EXIT.NOTHING_SKIPPED };
+};
+
+const printExplained = (
+  source: string | undefined,
+  skips: SkipLine[],
+  result: ReturnType<typeof convert>,
+): void => {
+  if (source !== undefined) console.log(source);
+  for (const skip of skips)
+    console.log(
+      `skipped ${skip.reason}${skip.class === undefined ? "" : ` "${skip.class}"`}: ${skip.detail}\n  fix: ${skip.hint}`,
+    );
+  console.log("");
+  console.log(
+    result.style
+      ? `checked: same declarations as Tailwind (${result.rules} atomic rules)`
+      : `not converted: ${skips.length} skipped`,
+  );
 };
 
 const summarise = (report: Report, fields: string[] | undefined): unknown => ({
@@ -193,6 +199,9 @@ export const planCommand = async (args: Args, out: Output): Promise<CommandResul
   return { exit: planExit(report) };
 };
 
+const writeWouldClobber = (args: Args, target: string, write: boolean): boolean =>
+  write && !flagWasPassed(args, "allow-dirty");
+
 const dirtyGuard = (target: string): Failure | undefined => {
   const dirty = dirtyFiles(path.resolve(containingDir(target)));
   if (!dirty || dirty.length === 0) return undefined;
@@ -203,6 +212,9 @@ const dirtyGuard = (target: string): Failure | undefined => {
     "Commit or stash first, or re-run with --allow-dirty (your edits will be interleaved and hard to revert).",
   );
 };
+
+const sumOf = (results: ApplyFileResult[], key: "rewritten" | "skipped"): number =>
+  results.reduce((total, r) => total + r[key], 0);
 
 const applyJson = (
   touched: ApplyFileResult[],
@@ -241,10 +253,8 @@ export const applyCommand = async (args: Args, out: Output): Promise<CommandResu
   if (typeof target !== "string") return target;
 
   const write = flagWithoutValue(args, "write");
-  if (write && !flagWasPassed(args, "allow-dirty")) {
-    const blocked = dirtyGuard(target);
-    if (blocked) return blocked;
-  }
+  const blocked = writeWouldClobber(args, target, write) ? dirtyGuard(target) : undefined;
+  if (blocked) return blocked;
 
   const css = entryCssFor(args, containingDir(target), `tw2sx apply ${target}`);
   if (typeof css !== "string") return css;
@@ -257,8 +267,8 @@ export const applyCommand = async (args: Args, out: Output): Promise<CommandResu
   );
   const results = scanned.map(s => applyScanned(sys, s, write));
   const touched = results.filter(r => r.rewritten > 0);
-  const rewritten = touched.reduce((a, r) => a + r.rewritten, 0);
-  const skipped = results.reduce((a, r) => a + r.skipped, 0);
+  const rewritten = sumOf(touched, "rewritten");
+  const skipped = sumOf(results, "skipped");
 
   if (out.json) emit(applyJson(touched, write, rewritten, skipped));
   else printApply({ touched, write, rewritten, skipped, target, limit: out.limit });

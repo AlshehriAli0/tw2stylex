@@ -11,21 +11,13 @@ import {
   readOutput,
   skippedCommand,
   type CommandResult,
+  type Output,
 } from "./commands.ts";
 import { EXIT, fail } from "./fail.ts";
 import { version } from "./init.ts";
 import { FIX_MEANING, FIXES, REASONS } from "./skip.ts";
 
-/**
- * Compiling Babel, StyleX, Tailwind and postcss from source is a fixed cost paid before any work
- * starts, and the migration loop runs this command over and over. Node keeps the compiled
- * bytecode on disk, so only the first run pays. Older runtimes without it lose nothing.
- */
-try {
-  enableCompileCache();
-} catch {
-  // No cache available; the run is correct either way.
-}
+if (typeof enableCompileCache === "function") enableCompileCache();
 
 const HELP = `tw2sx - convert Tailwind v4 to StyleX.
 
@@ -71,28 +63,28 @@ const report = (result: CommandResult, json: boolean): number => {
   return result.exit_code;
 };
 
+const COMMANDS: Record<
+  string,
+  (args: Args, out: Output) => CommandResult | Promise<CommandResult>
+> = {
+  init: initCommand,
+  explain: explainCommand,
+  plan: planCommand,
+  apply: applyCommand,
+  skipped: skippedCommand,
+};
+
 const run = async (args: Args): Promise<CommandResult> => {
-  const out = readOutput(args);
-  switch (positionalAt(args, 0)) {
-    case "init":
-      return initCommand(args, out);
-    case "explain":
-      return await explainCommand(args, out);
-    case "plan":
-      return await planCommand(args, out);
-    case "apply":
-      return await applyCommand(args, out);
-    case "skipped":
-      return skippedCommand(args, out);
-    case undefined:
-    default:
-      return fail(
-        "E_UNKNOWN_COMMAND",
-        EXIT.BAD_ARGUMENTS,
-        `Unknown command: ${positionalAt(args, 0) ?? "(none)"}`,
-        "Run tw2sx help.",
-      );
-  }
+  const name = positionalAt(args, 0) ?? "";
+  const command = COMMANDS[name];
+  if (!command)
+    return fail(
+      "E_UNKNOWN_COMMAND",
+      EXIT.BAD_ARGUMENTS,
+      `Unknown command: ${name || "(none)"}`,
+      "Run tw2sx help.",
+    );
+  return await command(args, readOutput(args));
 };
 
 const main = async (): Promise<number> => {

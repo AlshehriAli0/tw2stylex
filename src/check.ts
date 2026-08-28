@@ -6,35 +6,29 @@ import { cjsDefault, isRecord } from "./cjs.ts";
 import type { ResolvedClasses } from "./classes-to-css.ts";
 import { printCreate, type Style } from "./css-to-stylex.ts";
 
-/**
- * Babel and the StyleX plugin are the slowest imports in the tool and only verification needs
- * them, so they are fetched at the moment of use. In a normal run that moment is inside the
- * verifier thread, and the main thread never loads them at all.
- */
-const req = createRequire(import.meta.url);
+const require_ = createRequire(import.meta.url);
+
+const once = <T>(load: () => T): (() => T) => {
+  let value: T | undefined;
+  return () => (value ??= load());
+};
 
 type Transform = typeof import("@babel/core").transformSync;
-
-type Babel = { transformSync: Transform; plugin: unknown };
+type TransformOptions = Parameters<Transform>[1];
 
 const isTransform = (v: unknown): v is Transform => typeof v === "function";
 
-let loaded: Babel | undefined;
-
-const babel = (): Babel => {
-  if (loaded) return loaded;
-  const core: unknown = req("@babel/core");
-  const mod: unknown = req("@stylexjs/babel-plugin");
+const babelTransform = once((): Transform => {
+  const core: unknown = require_("@babel/core");
   if (!isRecord(core) || !isTransform(core.transformSync))
     throw new Error("@babel/core did not provide transformSync.");
+  return core.transformSync;
+});
 
-  const ready: Babel = {
-    transformSync: core.transformSync,
-    plugin: typeof mod === "function" ? mod : cjsDefault(mod),
-  };
-  loaded = ready;
-  return ready;
-};
+const stylexPlugin = once((): unknown => {
+  const plugin: unknown = require_("@stylexjs/babel-plugin");
+  return typeof plugin === "function" ? plugin : cjsDefault(plugin);
+});
 
 export type CompiledRule = { className: string; css: string; priority: number };
 
@@ -71,39 +65,29 @@ const readMeta = (metadata: unknown): StyleXMeta => {
 const KEEP_MEDIA_QUERIES_AS_IS = false;
 const REPORT_DROPPED_SHORTHANDS = "throw";
 
-const PLUGIN_OPTIONS = {
-  dev: false,
-  runtimeInjection: false,
-  enableMinifiedKeys: false,
-  enableMediaQueryOrder: KEEP_MEDIA_QUERIES_AS_IS,
-  propertyValidationMode: REPORT_DROPPED_SHORTHANDS,
-  unstable_moduleResolution: { type: "commonJS", rootDir: "/tw2sx" },
-};
-
-/**
- * Babel re-resolves its configuration whenever the options it is handed are a new object, and
- * this runs once per distinct class string. Hoisting the whole thing means one resolution for
- * the process instead of thousands.
- */
-type TransformOptions = Parameters<Transform>[1];
-
-let babelOptions: TransformOptions | undefined;
-
-const optionsFor = (plugin: unknown): TransformOptions => {
-  babelOptions ??= {
-    filename: "/tw2sx/virtual.js",
-    babelrc: false,
-    configFile: false,
-    plugins: [[plugin, PLUGIN_OPTIONS]],
-  };
-  return babelOptions;
-};
+const babelOptions = once((): TransformOptions => ({
+  filename: "/tw2sx/virtual.js",
+  babelrc: false,
+  configFile: false,
+  plugins: [
+    [
+      stylexPlugin(),
+      {
+        dev: false,
+        runtimeInjection: false,
+        enableMinifiedKeys: false,
+        enableMediaQueryOrder: KEEP_MEDIA_QUERIES_AS_IS,
+        propertyValidationMode: REPORT_DROPPED_SHORTHANDS,
+        unstable_moduleResolution: { type: "commonJS", rootDir: "/tw2sx" },
+      },
+    ],
+  ],
+}));
 
 export const compileStyleX = (source: string): { rules: CompiledRule[] } | { error: string } => {
   const code = `import * as stylex from '@stylexjs/stylex';\n${source}\nexport { styles };\n`;
   try {
-    const { transformSync, plugin } = babel();
-    const res = transformSync(code, optionsFor(plugin));
+    const res = babelTransform()(code, babelOptions());
     const rules = readMeta(res?.metadata).map(([className, rule, priority]) => ({
       className,
       css: rule.ltr,
@@ -120,14 +104,9 @@ const conditionPart = (selector: string): string =>
 
 type FlatDecl = { path: string[]; property: string; value: string };
 
-/**
- * An atomic rule is shared by every style that uses that declaration, so the same handful of
- * bytes would otherwise be parsed once per style. The class name is a hash of the rule, which
- * makes it a free cache key.
- */
-const flatByClassName = new Map<string, FlatDecl[]>();
+const declarationsByClassName = new Map<string, FlatDecl[]>();
 
-const flattenRule = (css: string): FlatDecl[] => {
+const declarationsIn = (css: string): FlatDecl[] => {
   const flat: FlatDecl[] = [];
 
   const walk = (node: postcss.Container, path: string[]): void => {
@@ -151,10 +130,10 @@ export const declsFromRules = (rules: CompiledRule[]): DeclarationGroup[] => {
   const byCondition = new Map<string, DeclarationGroup>();
 
   for (const { className, css } of rules) {
-    let flat = flatByClassName.get(className);
+    let flat = declarationsByClassName.get(className);
     if (!flat) {
-      flat = flattenRule(css);
-      flatByClassName.set(className, flat);
+      flat = declarationsIn(css);
+      declarationsByClassName.set(className, flat);
     }
     for (const { path, property, value } of flat) {
       const key = path.join(" ");
@@ -299,78 +278,71 @@ export const checkStyle = (name: string, resolved: ResolvedClasses, ns: Style): 
   return compareStyle(name, resolved, compiled.rules);
 };
 
-/**
- * StyleX charges per compile, not per style, so one call for the whole run costs about what a
- * dozen single calls do. The compiled object literal says which atomic classes each key ended up
- * with, which is what lets the rules be handed back to the style they came from.
- */
+const field = (node: unknown, key: string): unknown => (isRecord(node) ? node[key] : undefined);
+
+const list = (node: unknown, key: string): unknown[] => {
+  const value = field(node, key);
+  return Array.isArray(value) ? value : [];
+};
+
+const stringValue = (node: unknown): string => {
+  const value = field(node, "value");
+  return typeof value === "string" ? value : "";
+};
+
+const nameOf = (node: unknown): string | undefined => {
+  const identifier = field(node, "name");
+  if (typeof identifier === "string") return identifier;
+  const quoted = field(node, "value");
+  return typeof quoted === "string" ? quoted : undefined;
+};
+
+const styleEntriesOf = (ast: unknown): unknown[] =>
+  list(field(ast, "program"), "body")
+    .flatMap(statement => list(statement, "declarations"))
+    .flatMap(declarator => list(field(declarator, "init"), "properties"));
+
+const atomicClassesOf = (styleEntry: unknown): string[] =>
+  list(field(styleEntry, "value"), "properties")
+    .filter(property => nameOf(field(property, "key")) !== "$$css")
+    .flatMap(property => stringValue(field(property, "value")).split(" "))
+    .filter(Boolean);
+
 const classNamesByStyle = (ast: unknown): Map<string, string[]> => {
-  const found = new Map<string, string[]>();
-  const program = isRecord(ast) && isRecord(ast.program) ? ast.program : undefined;
-  const body: unknown = program?.body;
-  if (!Array.isArray(body)) return found;
-
-  for (const statement of body) {
-    const declarations = isRecord(statement) ? statement.declarations : undefined;
-    if (!Array.isArray(declarations)) continue;
-    for (const declarator of declarations) {
-      const init = isRecord(declarator) ? declarator.init : undefined;
-      if (!isRecord(init) || !Array.isArray(init.properties)) continue;
-      for (const property of init.properties) readStyleEntry(property, found);
-    }
+  const byStyle = new Map<string, string[]>();
+  for (const entry of styleEntriesOf(ast)) {
+    const name = nameOf(field(entry, "key"));
+    if (name !== undefined) byStyle.set(name, atomicClassesOf(entry));
   }
-  return found;
-};
-
-const literalKey = (node: unknown): string | undefined => {
-  if (!isRecord(node)) return undefined;
-  if (typeof node.name === "string") return node.name;
-  return typeof node.value === "string" ? node.value : undefined;
-};
-
-const readStyleEntry = (property: unknown, into: Map<string, string[]>): void => {
-  if (!isRecord(property)) return;
-  const name = literalKey(property.key);
-  const value = property.value;
-  if (name === undefined || !isRecord(value) || !Array.isArray(value.properties)) return;
-
-  const classes: string[] = [];
-  for (const entry of value.properties) {
-    if (!isRecord(entry)) continue;
-    if (literalKey(entry.key) === "$$css") continue;
-    const literal = isRecord(entry.value) ? entry.value.value : undefined;
-    if (typeof literal === "string") classes.push(...literal.split(" ").filter(Boolean));
-  }
-  into.set(name, classes);
+  return byStyle;
 };
 
 export type BatchResult = { rules: Map<string, CompiledRule[]> } | { error: string };
+
+const rulesByClassName = (metadata: unknown): Map<string, CompiledRule> => {
+  const byClassName = new Map<string, CompiledRule>();
+  for (const [className, rule, priority] of readMeta(metadata))
+    byClassName.set(className, { className, css: rule.ltr, priority });
+  return byClassName;
+};
 
 export const compileMany = (styles: Record<string, Style>): BatchResult => {
   const code = `import * as stylex from '@stylexjs/stylex';\n${printCreate(styles)}\nexport { styles };\n`;
   let res;
   try {
-    const { transformSync, plugin } = babel();
-    res = transformSync(code, { ...optionsFor(plugin), ast: true, code: false });
+    res = babelTransform()(code, { ...babelOptions(), ast: true, code: false });
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
 
-  const byClassName = new Map<string, CompiledRule>();
-  for (const [className, rule, priority] of readMeta(res?.metadata))
-    byClassName.set(className, { className, css: rule.ltr, priority });
-
-  const owned = classNamesByStyle(res?.ast);
+  const ruleFor = rulesByClassName(res?.metadata);
+  const classesOf = classNamesByStyle(res?.ast);
   const rules = new Map<string, CompiledRule[]>();
-  for (const name of Object.keys(styles)) {
-    const mine = owned.get(name) ?? [];
+  for (const name of Object.keys(styles))
     rules.set(
       name,
-      mine.flatMap(className => {
-        const rule = byClassName.get(className);
-        return rule ? [rule] : [];
-      }),
+      (classesOf.get(name) ?? []).flatMap(c => ruleFor.get(c) ?? []),
     );
-  }
+
   return { rules };
 };
