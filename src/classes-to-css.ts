@@ -228,6 +228,14 @@ const slotsFromClasses = (roots: Roots): Map<string, string> => {
 const twSlots = (roots: Roots): Map<string, string> =>
   new Map([...slotDefaults(roots), ...slotsFromClasses(roots)]);
 
+const CONDITIONS_ON_AN_ANCESTOR = /^&?:(is|where)\(/;
+
+const afterOwnClass = (selector: string, className: string): string => {
+  const own = `.${className}`;
+  const at = selector.indexOf(own);
+  return at === -1 ? selector : selector.slice(at + own.length);
+};
+
 const skipForSelector = (selector: string, className: string): Skip => {
   const readable = unescape(selector);
   if (/>\s*:not\(:last-child\)/.test(readable) || /^(space|divide)-/.test(className))
@@ -244,7 +252,7 @@ const skipForSelector = (selector: string, className: string): Skip => {
       detail: `"${className}" depends on a marked ancestor or sibling ("${readable}").`,
       hint: "Use stylex.when.ancestor()/siblingBefore() plus stylex.defaultMarker() on that element.",
     };
-  if (/^&?:is\(|^&?:where\(/.test(readable.trim()) || /\*/.test(readable))
+  if (CONDITIONS_ON_AN_ANCESTOR.test(afterOwnClass(readable, className)))
     return {
       reason: "parent-state",
       class: className,
