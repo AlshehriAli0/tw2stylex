@@ -1,24 +1,34 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export const findEntryCss = (from: string): string | undefined => {
-  const roots = [from, ...ancestors(from)];
-  for (const dir of roots) {
-    for (const rel of [
-      "src/index.css",
-      "src/app.css",
-      "src/styles/globals.css",
-      "app/globals.css",
-      "styles/globals.css",
-      "index.css",
-    ]) {
-      const f = path.join(dir, rel);
-      if (fs.existsSync(f) && /@import\s+["']tailwindcss/.test(fs.readFileSync(f, "utf8")))
-        return f;
-    }
-  }
-  return undefined;
-};
+const ENTRY_CSS_LOCATIONS = [
+  "src/index.css",
+  "src/app.css",
+  "src/styles/globals.css",
+  "app/globals.css",
+  "styles/globals.css",
+  "index.css",
+];
+
+const PULLS_IN_TAILWIND = /@import\s+["']tailwindcss/;
+
+export const findEntryCss = (from: string): string | undefined =>
+  searchUp(from, ENTRY_CSS_LOCATIONS).find(
+    file => fs.existsSync(file) && PULLS_IN_TAILWIND.test(fs.readFileSync(file, "utf8")),
+  );
+
+const CONFIG_LOCATIONS = [
+  "tailwind.config.js",
+  "tailwind.config.cjs",
+  "tailwind.config.mjs",
+  "tailwind.config.ts",
+];
+
+export const findConfig = (from: string): string | undefined =>
+  searchUp(from, CONFIG_LOCATIONS).find(file => fs.existsSync(file));
+
+const searchUp = (from: string, locations: string[]): string[] =>
+  [from, ...ancestors(from)].flatMap(dir => locations.map(rel => path.join(dir, rel)));
 
 const ancestors = (dir: string): string[] => {
   const out: string[] = [];

@@ -1,7 +1,7 @@
 ---
 name: migrating-tailwind-to-stylex
 description: >-
-  Migrates Tailwind v4 to StyleX with the tw2sx CLI, then hand-resolves what it skips.
+  Migrates Tailwind to StyleX with the tw2sx CLI, then hand-resolves what it skips.
   Use when moving code off Tailwind, when working a tw2sx report, when installing StyleX
   into a build, or when writing StyleX styles by hand.
 ---

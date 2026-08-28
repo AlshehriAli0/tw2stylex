@@ -3,12 +3,15 @@ import { createRequire } from "node:module";
 import path from "node:path";
 
 import { cjsDefault, isRecord, requireExport } from "./cjs.ts";
+import { findConfig } from "./find-files.ts";
+import { loadV3 } from "./tailwind-v3.ts";
 
-export type DesignSystem = {
+type Compiled = {
   candidatesToCss: (classes: string[]) => Array<string | null>;
   getClassOrder: (classes: string[]) => Array<[string, bigint | null]>;
-  resolveThemeValue: (path: string, forceInline?: boolean) => string | undefined;
 };
+
+export type DesignSystem = Compiled & { slotDefaults: Map<string, string> };
 
 export type LoadedSystem = { ds: DesignSystem; entry: string; base: string; version: string };
 
@@ -140,23 +143,53 @@ type LoadDesignSystemFn = (
       kind: string,
     ) => Promise<{ path: string; base: string; module: unknown }>;
   },
-) => Promise<DesignSystem>;
+) => Promise<Compiled>;
 
 const isLoadDesignSystem = (v: unknown): v is LoadDesignSystemFn => typeof v === "function";
 
-export const loadDesignSystem = async (entryCssPath: string): Promise<LoadedSystem> => {
-  const entry = path.resolve(entryCssPath);
-  if (!fs.existsSync(entry)) throw new Error(`entry CSS not found: ${entry}`);
-  const base = path.dirname(entry);
-  const { require: req, packageRoot, resolveCss } = makeResolver(base);
+const CONFIG_IN_CSS = /@config\s+["']([^"']+)["']/;
 
+const configFor = (entry: string): string => {
+  if (!entry.endsWith(".css")) return entry;
+  const beside = path.dirname(entry);
+  const declared = CONFIG_IN_CSS.exec(fs.readFileSync(entry, "utf8"))?.[1];
+  const found = declared === undefined ? findConfig(beside) : path.resolve(beside, declared);
+  if (found === undefined)
+    throw new Error(
+      `This Tailwind reads its theme from a tailwind.config file, and none sits near ${entry}. Pass --config <file>.`,
+    );
+  return found;
+};
+
+export const loadDesignSystem = async (entryPath: string): Promise<LoadedSystem> => {
+  const entry = path.resolve(entryPath);
+  if (!fs.existsSync(entry)) throw new Error(`entry not found: ${entry}`);
+  const base = path.dirname(entry);
+  const resolver = makeResolver(base);
+  const version =
+    asString(readPackageMeta(resolver.packageRoot("tailwindcss")).version) ?? "unknown";
+
+  if (majorOf(version) === 3) {
+    const config = configFor(entry);
+    return { ds: loadV3(resolver.require, config), entry: config, base, version };
+  }
+  return await loadV4(resolver, entry, version);
+};
+
+const majorOf = (version: string): number => Number.parseInt(version, 10);
+
+const loadV4 = async (
+  { require: req, resolveCss }: Resolver,
+  entry: string,
+  version: string,
+): Promise<LoadedSystem> => {
+  const base = path.dirname(entry);
   const twPath = req.resolve("tailwindcss");
   const twMod: unknown = await import(twPath);
   const tw = requireExport(twMod, "__unstable__loadDesignSystem", `tailwindcss at ${twPath}`);
   const load = tw.__unstable__loadDesignSystem;
-  if (!isLoadDesignSystem(load)) throw new Error(`tailwindcss at ${twPath} is not a v4 build.`);
-
-  const version = asString(readPackageMeta(packageRoot("tailwindcss")).version) ?? "unknown";
+  if (!isLoadDesignSystem(load))
+    throw new Error(`tailwindcss at ${twPath} does not expose __unstable__loadDesignSystem().`);
 
   const loadStylesheet = async (
     id: string,
@@ -180,6 +213,6 @@ export const loadDesignSystem = async (entryCssPath: string): Promise<LoadedSyst
     return { path: file, base: path.dirname(file), module: cjsDefault(mod) };
   };
 
-  const ds = await load(fs.readFileSync(entry, "utf8"), { base, loadStylesheet, loadModule });
-  return { ds, entry, base, version };
+  const v4 = await load(fs.readFileSync(entry, "utf8"), { base, loadStylesheet, loadModule });
+  return { ds: { ...v4, slotDefaults: new Map() }, entry, base, version };
 };

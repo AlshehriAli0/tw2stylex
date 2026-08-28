@@ -380,7 +380,7 @@ describe("entry css discovery fails loudly rather than guessing", () => {
       );
       const args = parseArgs(["plan", path.join(bare, "a.tsx")]);
       const result = await planCommand(args, readOutput(args));
-      expect(codeOf(result)).toBe("E_NO_ENTRY_CSS");
+      expect(codeOf(result)).toBe("E_NO_TAILWIND_ENTRY");
       expect(exitOf(result)).toBe(EXIT.NOT_READY);
       expect(isError(result) && result.hint).toContain("--css");
     } finally {

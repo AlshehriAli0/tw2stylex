@@ -60,7 +60,7 @@ const stubSystem = (css: Record<string, string>): DesignSystem => ({
   getClassOrder: names =>
     names.map((n, i): [string, bigint | null] => [n, n in css ? BigInt(i) : null]),
   candidatesToCss: names => names.map(n => css[n] ?? null),
-  resolveThemeValue: () => undefined,
+  slotDefaults: new Map(),
 });
 
 describe("when our own output is wrong, we say so and convert nothing", () => {

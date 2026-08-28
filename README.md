@@ -1,6 +1,6 @@
 # tw2sx
 
-Migrate Tailwind v4 to StyleX. Converts what it can prove; skips the rest and tells an agent
+Migrate Tailwind to StyleX. Converts what it can prove; skips the rest and tells an agent
 exactly what to do about each skip.
 
 ```
@@ -55,8 +55,10 @@ Pin it as a dev dependency rather than reaching for `npx tw2sx@latest`. The migr
 compares skip counts run over run, and that comparison only means anything if both runs used
 the same binary. A version that moves under you moves the skip count with it.
 
-`tailwindcss@4` is a peer dependency — tw2sx resolves *your* copy, so your `@theme`,
-`@utility` and `@plugin` are all in scope.
+`tailwindcss` is a peer dependency — tw2sx resolves *your* copy and drives it, so your theme,
+your custom utilities and your plugins are all in scope. It reads whichever entry your project
+keeps: the CSS that imports Tailwind, or the `tailwind.config` file. Point it at one with
+`--css` or `--config` if the search misses.
 
 ## Commands
 
@@ -119,11 +121,11 @@ bans the properties it owns from its own style prop.
 
 ## Status
 
-Verified against a real Tailwind v4 app (970 files, 7,125 usages): **5,563 converted with zero
+Verified against a real Tailwind app (970 files, 7,125 usages): **5,563 converted with zero
 mismatches**, in ~3s, byte-identical output between Node and Bun. `plan` and `apply` agree on
 what converts, so the report never promises something `apply` will skip.
 
-`__unstable__loadDesignSystem` is exactly as unstable as it sounds — pin your Tailwind version.
+tw2sx drives your installed Tailwind through its own internals, so pin your Tailwind version.
 
 ### Findings worth knowing, all reproduced against `@stylexjs/babel-plugin@0.19.0`
 

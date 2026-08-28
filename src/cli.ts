@@ -19,7 +19,7 @@ import { FIX_MEANING, FIXES, REASONS } from "./skip.ts";
 
 if (typeof enableCompileCache === "function") enableCompileCache();
 
-const HELP = `tw2sx - convert Tailwind v4 to StyleX.
+const HELP = `tw2sx - convert Tailwind to StyleX.
 
 Converts a usage only when it can prove the CSS comes out the same as Tailwind produced.
 Everything else it SKIPS and lists, with a reason and how to fix it.
@@ -38,6 +38,7 @@ A TYPICAL RUN
 
 OPTIONS
   --css <file>        Your Tailwind entry CSS. Found automatically if you leave it out.
+  --config <file>     Your tailwind.config file, for projects that keep their theme there.
   --json[=<fields>]   JSON output. Plain --json lists the field names you can ask for.
   --limit <n>         How many skips to print (default 20). Use 0 for just the summary.
   --reason <r>        Show one reason only.

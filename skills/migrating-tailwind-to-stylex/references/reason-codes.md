@@ -63,8 +63,8 @@ named marker, or the style silently never applies. `anySibling`/`siblingAfter` c
 
 ## `parent-state` — needs-lookup
 
-The element matches only under some ancestor — most often class-based dark mode, which v4
-writes as `@custom-variant dark (&:is(.dark *))`.
+The element matches only under some ancestor — most often class-based dark mode, which
+compiles to `&:is(.dark *)`.
 
 **For dark mode, reach for theming** — it is the mechanism built for exactly this:
 

@@ -56,6 +56,7 @@ const unescape = (s: string): string => s.replace(/\\(.)/g, "$1");
 
 const EMPTY_SLOT_VALUES = new Set(["0 0 #0000", "none", ""]);
 const CONDITION_AT_RULES = new Set(["media", "supports", "container"]);
+const DECLARES_SLOT_DEFAULTS = new Set(["property", "defaults"]);
 const COMPOSES_A_LIST = /shadow|filter|transition|transform/;
 const MARKER_CLASS = /^(group|peer)(\/[\w-]+)?$/;
 const OPENERS = "([";
@@ -146,6 +147,11 @@ const fillTwSlots = (value: string, slots: Map<string, string>, depth = 0): stri
   return value.slice(0, at) + filled + fillTwSlots(value.slice(close + 1), slots, depth);
 };
 
+const QUOTED = /["']/;
+
+const normaliseSpacing = (value: string): string =>
+  QUOTED.test(value) ? value.trim() : value.replace(/\s+/g, " ").trim();
+
 const withoutEmptySlots = (value: string): string => {
   const parts = splitOnTopLevelCommas(value)
     .map(part => part.trim())
@@ -225,8 +231,8 @@ const slotsFromClasses = (roots: Roots): Map<string, string> => {
   return set;
 };
 
-const twSlots = (roots: Roots): Map<string, string> =>
-  new Map([...slotDefaults(roots), ...slotsFromClasses(roots)]);
+const twSlots = (ds: DesignSystem, roots: Roots): Map<string, string> =>
+  new Map([...ds.slotDefaults, ...slotDefaults(roots), ...slotsFromClasses(roots)]);
 
 const CONDITIONS_ON_AN_ANCESTOR = /^&?:(is|where)\(/;
 
@@ -292,7 +298,7 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
   const declarations: ResolvedClasses["declarations"] = new Map();
   const known = inTailwindOrder(ds, classNames, skips);
   const roots = parsedCssFor(ds, known);
-  const slots = twSlots(roots);
+  const slots = twSlots(ds, roots);
 
   const record = (path: ConditionPath, property: string, value: string): void => {
     const key = conditionKey(path);
@@ -311,7 +317,7 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
       return;
     }
 
-    const filled = fillTwSlots(decl.value, slots).trim();
+    const filled = normaliseSpacing(fillTwSlots(decl.value, slots));
     if (filled.includes("var(--tw-")) {
       skips.add({
         reason: "unresolved-variable",
@@ -340,8 +346,7 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
   };
 
   const walkAtRule = (at: AtRule, path: ConditionPath, className: string): void => {
-    const readElsewhere = at.name === "property";
-    if (readElsewhere) return;
+    if (DECLARES_SLOT_DEFAULTS.has(at.name)) return;
 
     if (!CONDITION_AT_RULES.has(at.name)) {
       skips.add({
@@ -367,6 +372,7 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
   known.forEach((className, i) => {
     const root = roots[i];
     if (root) walk(root, [], className);
+    else skips.add(skipForNoCss(className));
   });
 
   return { declarations, skips: skips.list };

@@ -47,8 +47,8 @@ The plugin appends every generated rule to that file. Without it nothing is emit
 
 ## Two settings the migration needs
 
-**`useCSSLayers: false` while Tailwind is still in the build.** Tailwind v4 puts utilities in
-`@layer utilities`, and unlayered CSS beats layered CSS. With layers on, StyleX loses to the
+**`useCSSLayers: false` while Tailwind is still in the build.** Unlayered CSS beats layered
+CSS. With layers on, StyleX loses to the
 Tailwind you have not deleted yet and migrated components keep their old styles. Flip it to
 `true` after the last Tailwind class is gone.
 

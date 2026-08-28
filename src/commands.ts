@@ -15,7 +15,7 @@ import { isRecord } from "./cjs.ts";
 import { convert, warmUp } from "./convert.ts";
 import { printCreate } from "./css-to-stylex.ts";
 import { EXIT, fail, type Failure } from "./fail.ts";
-import { collectFiles, findEntryCss } from "./find-files.ts";
+import { collectFiles, findConfig, findEntryCss } from "./find-files.ts";
 import { AGENT_HOMES, homesPresent, installSkill } from "./init.ts";
 import { plan } from "./plan.ts";
 import { renderReport, toSkipLine, type Report, type SkipLine } from "./report.ts";
@@ -63,18 +63,17 @@ const project = (finding: SkipLine, fields: string[] | undefined): Record<string
 const containingDir = (target: string): string =>
   fs.statSync(target).isDirectory() ? target : path.dirname(target);
 
-const entryCssFor = (args: Args, from: string, retry: string): string | Failure => {
-  const explicit = flagString(args, "css");
-  if (explicit !== undefined) return explicit;
-  const found = findEntryCss(from);
-  if (found !== undefined) return found;
-  return fail(
-    "E_NO_ENTRY_CSS",
+const entryFor = (args: Args, from: string, retry: string): string | Failure =>
+  flagString(args, "css") ??
+  flagString(args, "config") ??
+  findEntryCss(from) ??
+  findConfig(from) ??
+  fail(
+    "E_NO_TAILWIND_ENTRY",
     EXIT.NOT_READY,
-    "Could not find a Tailwind entry CSS.",
-    `Pass it explicitly: ${retry} --css src/index.css`,
+    "Could not find your Tailwind setup: no entry CSS, no tailwind.config file.",
+    `Point at one: ${retry} --css src/index.css, or ${retry} --config tailwind.config.js`,
   );
-};
 
 const requireExistingPath = (target: string | undefined, usage: string): string | Failure => {
   if (target === undefined) return fail("E_NO_INPUT", EXIT.BAD_ARGUMENTS, "No path given.", usage);
@@ -117,7 +116,7 @@ export const explainCommand = async (args: Args, out: Output): Promise<CommandRe
       'tw2sx explain "flex items-center p-4"',
     );
 
-  const css = entryCssFor(args, process.cwd(), "tw2sx explain <classes>");
+  const css = entryFor(args, process.cwd(), "tw2sx explain <classes>");
   if (typeof css !== "string") return css;
 
   const sys = await loadDesignSystem(css);
@@ -182,7 +181,7 @@ export const planCommand = async (args: Args, out: Output): Promise<CommandResul
   const target = requireExistingPath(positionalAt(args, 1), "tw2sx plan src/components/ui");
   if (typeof target !== "string") return target;
 
-  const css = entryCssFor(args, containingDir(target), `tw2sx plan ${target}`);
+  const css = entryFor(args, containingDir(target), `tw2sx plan ${target}`);
   if (typeof css !== "string") return css;
 
   const files = collectFiles(target);
@@ -256,7 +255,7 @@ export const applyCommand = async (args: Args, out: Output): Promise<CommandResu
   const blocked = writeWouldClobber(args, target, write) ? dirtyGuard(target) : undefined;
   if (blocked) return blocked;
 
-  const css = entryCssFor(args, containingDir(target), `tw2sx apply ${target}`);
+  const css = entryFor(args, containingDir(target), `tw2sx apply ${target}`);
   if (typeof css !== "string") return css;
 
   const sys = await loadDesignSystem(css);
