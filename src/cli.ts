@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { parseArgs, positionalAt, flagPresent, type Args } from "./args.ts";
+import { parseArgs, positionalAt, flagWasPassed, type Args } from "./args.ts";
 import {
   applyCommand,
   explainCommand,
@@ -9,7 +9,7 @@ import {
   skippedCommand,
   type CommandResult,
 } from "./commands.ts";
-import { EXIT, fail } from "./exit.ts";
+import { EXIT, fail } from "./fail.ts";
 import { FIX_MEANING, FIXES, REASONS } from "./skip.ts";
 
 const HELP = `tw2sx - convert Tailwind v4 to StyleX.
@@ -69,7 +69,7 @@ const run = async (args: Args): Promise<CommandResult> => {
     default:
       return fail(
         "E_UNKNOWN_COMMAND",
-        EXIT.USAGE,
+        EXIT.BAD_ARGUMENTS,
         `Unknown command: ${positionalAt(args, 0) ?? "(none)"}`,
         "Run tw2sx help.",
       );
@@ -80,9 +80,9 @@ const main = async (): Promise<number> => {
   const args = parseArgs(process.argv.slice(2));
   const command = positionalAt(args, 0);
 
-  if (command === undefined || command === "help" || flagPresent(args, "help")) {
+  if (command === undefined || command === "help" || flagWasPassed(args, "help")) {
     console.log(HELP);
-    return command === undefined ? EXIT.USAGE : EXIT.CLEAN;
+    return command === undefined ? EXIT.BAD_ARGUMENTS : EXIT.NOTHING_SKIPPED;
   }
 
   return report(await run(args), readOutput(args).json);
@@ -96,7 +96,7 @@ try {
     JSON.stringify(
       fail(
         "E_INTERNAL",
-        EXIT.INTERNAL,
+        EXIT.OUR_BUG,
         message,
         "This is a tw2sx bug. Re-run with --json and file the output.",
       ),
@@ -104,5 +104,5 @@ try {
       2,
     ),
   );
-  process.exit(EXIT.INTERNAL);
+  process.exit(EXIT.OUR_BUG);
 }

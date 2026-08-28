@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  flagBare,
+  flagWithoutValue,
   flagNumber,
-  flagPresent,
+  flagWasPassed,
   flagString,
   parseArgs,
   positionalAt,
@@ -19,22 +19,22 @@ describe("flags can be written either way", () => {
 
   test("a bare --name is true, not a string", () => {
     const args = parse("apply src --write");
-    expect(flagBare(args, "write")).toBe(true);
+    expect(flagWithoutValue(args, "write")).toBe(true);
     expect(flagString(args, "write")).toBeUndefined();
   });
 
   test("a flag before another flag stays bare", () => {
     // --json must not swallow --limit as its value.
     const args = parse("plan src --json --limit 5");
-    expect(flagBare(args, "json")).toBe(true);
+    expect(flagWithoutValue(args, "json")).toBe(true);
     expect(flagNumber(args, "limit", 20)).toBe(5);
   });
 
   test("--name= is an empty string, which is still a value", () => {
     const args = parse("plan src --json=");
     expect(flagString(args, "json")).toBe("");
-    expect(flagBare(args, "json")).toBe(false);
-    expect(flagPresent(args, "json")).toBe(true);
+    expect(flagWithoutValue(args, "json")).toBe(false);
+    expect(flagWasPassed(args, "json")).toBe(true);
   });
 
   test("a value containing = keeps everything after the first one", () => {
@@ -89,14 +89,14 @@ describe("flagNumber falls back rather than producing NaN", () => {
   });
 });
 
-describe("flagPresent and flagBare answer different questions", () => {
+describe("flagWasPassed and flagWithoutValue answer different questions", () => {
   test.each([
     ["--allow-dirty", true, true],
     ["--allow-dirty=false", true, false],
     ["", false, false],
   ])("%s -> present %p, bare %p", (line, present, bare) => {
     const args = parse(`apply src ${line}`);
-    expect(flagPresent(args, "allow-dirty")).toBe(present);
-    expect(flagBare(args, "allow-dirty")).toBe(bare);
+    expect(flagWasPassed(args, "allow-dirty")).toBe(present);
+    expect(flagWithoutValue(args, "allow-dirty")).toBe(bare);
   });
 });

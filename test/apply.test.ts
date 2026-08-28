@@ -5,9 +5,9 @@ import os from "node:os";
 import path from "node:path";
 
 import { applyFile, dirtyFiles } from "../src/apply.ts";
-import { scanFile } from "../src/extract.ts";
-import { processFile } from "../src/pipeline.ts";
-import { loadDesignSystem, type LoadedSystem } from "../src/resolve.ts";
+import { processFile } from "../src/plan.ts";
+import { scanFile } from "../src/scan-file.ts";
+import { loadDesignSystem, type LoadedSystem } from "../src/tailwind.ts";
 
 /**
  * The write path. Everything here runs against real files, because the bugs worth catching in

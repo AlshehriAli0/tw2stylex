@@ -1,9 +1,9 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import path from "node:path";
 
+import { BANNED_SHORTHANDS, resolveClasses } from "../src/classes-to-css.ts";
 import { convert } from "../src/convert.ts";
-import { BANNED_SHORTHANDS, resolveClasses } from "../src/reshape.ts";
-import { loadDesignSystem, type LoadedSystem } from "../src/resolve.ts";
+import { loadDesignSystem, type LoadedSystem } from "../src/tailwind.ts";
 
 let sys: LoadedSystem;
 beforeAll(async () => {

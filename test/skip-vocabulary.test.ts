@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 
-import { scanFile } from "../src/extract.ts";
-import { BANNED_SHORTHANDS } from "../src/reshape.ts";
+import { BANNED_SHORTHANDS } from "../src/classes-to-css.ts";
+import { scanFile } from "../src/scan-file.ts";
 import { DEFAULT_FIX, FIX_MEANING, FIXES, REASONS, type Reason } from "../src/skip.ts";
 
 const repo = path.join(import.meta.dir, "..");

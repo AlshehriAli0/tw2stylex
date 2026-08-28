@@ -2,7 +2,7 @@ import { parse } from "@babel/parser";
 import traverseMod from "@babel/traverse";
 import * as t from "@babel/types";
 
-import { cjsDefault } from "./interop.ts";
+import { cjsDefault } from "./cjs.ts";
 import type { Skip } from "./skip.ts";
 
 const isTraverse = (v: unknown): v is typeof traverseMod => typeof v === "function";
@@ -13,20 +13,14 @@ export type Loc = { line: number; column: number };
 
 export type UsageKind = "literal" | "cn-call" | "cva-base" | "cva-variant";
 
-/** One place in a file where classes are applied. */
 export type Usage = {
-  /** Static classNames we can resolve. */
   classNames: string[];
   loc: Loc;
-  /** Byte range of the whole JSX attribute, for byte-preserving rewrites. */
-  range?: [number, number];
-  /** True when the attribute sits on a lowercase host element, so props can be spread. */
-  hostElement?: boolean;
+  attributeRange?: [number, number];
+  onHostElement?: boolean;
   kind: UsageKind;
-  /** For cva usages: which axis/value this belongs to. */
   variantAxis?: string;
   variantValue?: string;
-  /** Anything in the expression we could not statically read. */
   skips: Skip[];
 };
 
@@ -34,10 +28,6 @@ export type ScanResult = { usages: Usage[]; hasStyleX: boolean };
 
 const MERGE_FNS = new Set(["cn", "clsx", "classnames", "twMerge", "twJoin", "cx"]);
 
-/**
- * `buttonVariants(...)`, `badgeVariants(...)` - the cva naming convention. We cannot follow the
- * call across files, but naming it precisely beats reporting it as an unreadable expression.
- */
 const looksLikeVariantFunction = (name: string): boolean => name.endsWith("Variants");
 
 const locOf = (node: t.Node): Loc => ({
@@ -47,7 +37,6 @@ const locOf = (node: t.Node): Loc => ({
 
 const splitClasses = (s: string): string[] => s.split(/\s+/).filter(Boolean);
 
-/** The static name of a property key, when it has one. */
 const keyName = (key: t.Node): string | undefined => {
   if (t.isIdentifier(key)) return key.name;
   if (t.isStringLiteral(key)) return key.value;
@@ -55,15 +44,9 @@ const keyName = (key: t.Node): string | undefined => {
   return undefined;
 };
 
-/**
- * A property's key when it is written literally. `{ [k]: on }` parses its key as the identifier
- * `k`, so reading the key without checking `computed` turns the variable's *name* into a class
- * and sends the agent hunting for a typo in a class that was never there.
- */
 const propKey = (prop: t.ObjectProperty): string | undefined =>
   prop.computed ? undefined : keyName(prop.key);
 
-/** The callee's plain name, for `cn(...)` and `utils.cn(...)` alike. */
 const calleeName = (callee: t.Node): string => {
   if (t.isIdentifier(callee)) return callee.name;
   if (t.isMemberExpression(callee) && t.isIdentifier(callee.property)) return callee.property.name;
@@ -78,8 +61,7 @@ const dynamic = (node: t.Node, detail: string, hint: string): Skip => ({
   hint,
 });
 
-/** Classes read out of a branch whose parent already recorded the skip. */
-const classesOnly = (node: t.Node): string[] => readClasses(node).classes;
+const classesWithoutSkips = (node: t.Node): string[] => readClasses(node).classes;
 
 const TEMPLATE_HINT =
   "Lift the condition into a boolean and apply a separate StyleX style conditionally.";
@@ -90,7 +72,6 @@ const CALL_HINT =
   "Convert it by hand, or add it to the merge-function list if it behaves like clsx.";
 const PROP_HINT = `Give the component a "style?: StyleXStylesWithout<{...}>" prop and pass it last to stylex.props(); see the skill's references/component-api.md.`;
 
-/** A template literal contributes its static chunks; each `${...}` is a skip. */
 const readTemplate = (n: t.TemplateLiteral, skips: Skip[]): string[] => {
   if (n.expressions.length > 0)
     skips.push(
@@ -99,7 +80,6 @@ const readTemplate = (n: t.TemplateLiteral, skips: Skip[]): string[] => {
   return n.quasis.flatMap(q => splitClasses(q.value.cooked ?? q.value.raw));
 };
 
-/** clsx({ 'a b': cond }) - the keys are the classes. */
 const readObjectMap = (n: t.ObjectExpression, skips: Skip[]): string[] => {
   const classes = n.properties.flatMap(prop => {
     if (!t.isObjectProperty(prop)) return [];
@@ -119,10 +99,6 @@ const readIdentifier = (n: t.Identifier, skips: Skip[]): string[] => {
   return [];
 };
 
-/**
- * Pull static class strings out of a className expression, recording a skip for every
- * part we could not read statically.
- */
 export const readClasses = (node: t.Node): Reader => {
   const skips: Skip[] = [];
 
@@ -138,7 +114,6 @@ export const readClasses = (node: t.Node): Reader => {
     return [];
   };
 
-  /** A known merge helper is transparent; anything else we cannot see through. */
   const walkCall = (n: t.CallExpression): string[] => {
     const name = calleeName(n.callee);
     if (MERGE_FNS.has(name)) return n.arguments.flatMap(a => walk(a));
@@ -164,18 +139,17 @@ export const readClasses = (node: t.Node): Reader => {
 
   const walkTernary = (n: t.ConditionalExpression): string[] => {
     skips.push(dynamic(n, "Ternary in a class expression", TERNARY_HINT));
-    return [...classesOnly(n.consequent), ...classesOnly(n.alternate)];
+    return [...classesWithoutSkips(n.consequent), ...classesWithoutSkips(n.alternate)];
   };
 
   const walkLogical = (n: t.LogicalExpression): string[] => {
     skips.push(dynamic(n, "Conditional (&&/||) class", LOGICAL_HINT));
-    return classesOnly(n.right);
+    return classesWithoutSkips(n.right);
   };
 
   return { classes: walk(node), skips };
 };
 
-/** The className/class attribute's value expression, if it has a readable one. */
 const classExpression = (attr: t.JSXAttribute): t.Node | undefined => {
   if (!t.isJSXIdentifier(attr.name)) return undefined;
   if (attr.name.name !== "className" && attr.name.name !== "class") return undefined;
@@ -185,10 +159,6 @@ const classExpression = (attr: t.JSXAttribute): t.Node | undefined => {
   return undefined;
 };
 
-/**
- * StyleX's no-conflicting-props: an element spreading stylex.props() must not also carry
- * its own style attribute - one of them silently loses.
- */
 const styleAttrSkip = (element: t.JSXOpeningElement): Skip | undefined => {
   const styleAttr = element.attributes.find(
     (a): a is t.JSXAttribute =>
@@ -225,15 +195,13 @@ const jsxUsage = (
   return {
     classNames: classes,
     loc: locOf(attr),
-    range: rangeOf(attr),
-    hostElement: element ? isHostElement(element) : false,
+    attributeRange: rangeOf(attr),
+    onHostElement: element ? isHostElement(element) : false,
     kind: t.isCallExpression(expr) ? "cn-call" : "literal",
     skips,
   };
 };
 
-/** Every `variants: { axis: { value: "classes" } }` entry of a cva() config. */
-/** Every `value: "classes"` pair under one variant axis. */
 const axisUsages = (variantAxis: string, values: t.ObjectExpression): Usage[] =>
   values.properties.flatMap(value => {
     if (!t.isObjectProperty(value)) return [];
@@ -293,8 +261,8 @@ export const scanFile = (code: string, filename: string): ScanResult => {
     JSXAttribute(p) {
       const parent = p.parentPath.node;
       const element = t.isJSXOpeningElement(parent) ? parent : undefined;
-      const site = jsxUsage(p.node, element);
-      if (site) usages.push(site);
+      const usage = jsxUsage(p.node, element);
+      if (usage) usages.push(usage);
     },
     CallExpression(p) {
       if (calleeName(p.node.callee) === "cva") usages.push(...cvaUsages(p.node));

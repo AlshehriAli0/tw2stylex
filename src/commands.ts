@@ -3,22 +3,24 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { applyFile, dirtyFiles, type ApplyFileResult } from "./apply.ts";
-import { flagBare, flagNumber, flagPresent, flagString, positionalAt, type Args } from "./args.ts";
+import {
+  flagWithoutValue,
+  flagNumber,
+  flagWasPassed,
+  flagString,
+  positionalAt,
+  type Args,
+} from "./args.ts";
+import { isRecord } from "./cjs.ts";
 import { convert } from "./convert.ts";
-import { EXIT, fail, type Failure } from "./exit.ts";
+import { EXIT, fail, type Failure } from "./fail.ts";
 import { collectFiles, findEntryCss } from "./find-files.ts";
-import { isRecord } from "./interop.ts";
-import { plan } from "./pipeline.ts";
+import { plan } from "./plan.ts";
 import { renderReport, toSkipLine, type Report, type SkipLine } from "./report.ts";
-import { loadDesignSystem } from "./resolve.ts";
+import { loadDesignSystem } from "./tailwind.ts";
 
-/** Every command returns an exit code or an error envelope; nothing calls process.exit itself. */
 export type CommandResult = { exit: number } | Failure;
 
-/**
- * `code` is the discriminator, not `ok` - a Report carries an `ok` field too, so testing
- * that would classify a perfectly good report as a failure.
- */
 const isError = (r: object): r is Failure => "code" in r && typeof r.code === "string";
 
 export const SKIP_FIELDS = [
@@ -56,7 +58,6 @@ const project = (finding: SkipLine, fields: string[] | undefined): Record<string
   return out;
 };
 
-/** The directory a target path lives in, for entry-CSS discovery. */
 const containingDir = (target: string): string =>
   fs.statSync(target).isDirectory() ? target : path.dirname(target);
 
@@ -67,16 +68,16 @@ const entryCssFor = (args: Args, from: string, retry: string): string | Failure 
   if (found !== undefined) return found;
   return fail(
     "E_NO_ENTRY_CSS",
-    EXIT.PRECONDITION,
+    EXIT.NOT_READY,
     "Could not find a Tailwind entry CSS.",
     `Pass it explicitly: ${retry} --css src/index.css`,
   );
 };
 
 const requireExistingPath = (target: string | undefined, usage: string): string | Failure => {
-  if (target === undefined) return fail("E_NO_INPUT", EXIT.USAGE, "No path given.", usage);
+  if (target === undefined) return fail("E_NO_INPUT", EXIT.BAD_ARGUMENTS, "No path given.", usage);
   if (!fs.existsSync(target))
-    return fail("E_NO_SUCH_PATH", EXIT.USAGE, `Path not found: ${target}`, usage);
+    return fail("E_NO_SUCH_PATH", EXIT.BAD_ARGUMENTS, `Path not found: ${target}`, usage);
   return target;
 };
 
@@ -88,7 +89,7 @@ export const explainCommand = async (args: Args, out: Output): Promise<CommandRe
   if (classes.length === 0)
     return fail(
       "E_NO_INPUT",
-      EXIT.USAGE,
+      EXIT.BAD_ARGUMENTS,
       "No classes given.",
       'tw2sx explain "flex items-center p-4"',
     );
@@ -98,7 +99,6 @@ export const explainCommand = async (args: Args, out: Output): Promise<CommandRe
 
   const sys = await loadDesignSystem(css);
   const result = convert(sys.ds, "styles", classes);
-  // No file to point at, so column 0 marks "this came from the command line".
   const skips = result.skips.map(s => toSkipLine("<argv>", 0, 0, s));
 
   if (out.json) {
@@ -124,7 +124,7 @@ export const explainCommand = async (args: Args, out: Output): Promise<CommandRe
     );
   }
 
-  return { exit: skips.length > 0 ? EXIT.SKIPPED : EXIT.CLEAN };
+  return { exit: skips.length > 0 ? EXIT.SOME_SKIPPED : EXIT.NOTHING_SKIPPED };
 };
 
 const summarise = (report: Report, fields: string[] | undefined): unknown => ({
@@ -144,8 +144,8 @@ const summarise = (report: Report, fields: string[] | undefined): unknown => ({
 });
 
 const planExit = (report: Report): number => {
-  if (!report.ok) return EXIT.INTERNAL;
-  return report.summary.skipped > 0 ? EXIT.SKIPPED : EXIT.CLEAN;
+  if (!report.ok) return EXIT.OUR_BUG;
+  return report.summary.skipped > 0 ? EXIT.SOME_SKIPPED : EXIT.NOTHING_SKIPPED;
 };
 
 export const planCommand = async (args: Args, out: Output): Promise<CommandResult> => {
@@ -174,7 +174,7 @@ const dirtyGuard = (target: string): Failure | undefined => {
   if (!dirty || dirty.length === 0) return undefined;
   return fail(
     "E_DIRTY_TREE",
-    EXIT.PRECONDITION,
+    EXIT.NOT_READY,
     `Refusing to write: ${dirty.length} uncommitted change(s) under ${target}.\n  ${dirty.slice(0, 5).join("\n  ")}`,
     "Commit or stash first, or re-run with --allow-dirty (your edits will be interleaved and hard to revert).",
   );
@@ -216,8 +216,8 @@ export const applyCommand = async (args: Args, out: Output): Promise<CommandResu
   const target = requireExistingPath(positionalAt(args, 1), "tw2sx apply src/components/ui");
   if (typeof target !== "string") return target;
 
-  const write = flagBare(args, "write");
-  if (write && !flagPresent(args, "allow-dirty")) {
+  const write = flagWithoutValue(args, "write");
+  if (write && !flagWasPassed(args, "allow-dirty")) {
     const blocked = dirtyGuard(target);
     if (blocked) return blocked;
   }
@@ -234,7 +234,7 @@ export const applyCommand = async (args: Args, out: Output): Promise<CommandResu
   if (out.json) emit(applyJson(touched, write, rewritten, skipped));
   else printApply({ touched, write, rewritten, skipped, target, limit: out.limit });
 
-  return { exit: skipped > 0 ? EXIT.SKIPPED : EXIT.CLEAN };
+  return { exit: skipped > 0 ? EXIT.SOME_SKIPPED : EXIT.NOTHING_SKIPPED };
 };
 
 const isReport = (v: unknown): v is Report => isRecord(v) && Array.isArray(v.files);
@@ -253,13 +253,12 @@ const filterSkips = (report: Report, args: Args): SkipLine[] => {
     .filter(f => fix === undefined || f.fix === fix);
 };
 
-/** Load the report named by the first positional, or say precisely why we could not. */
 const openReport = (args: Args): Report | Failure => {
   const file = positionalAt(args, 1);
   if (file === undefined || !fs.existsSync(file))
     return fail(
       "E_NO_REPORT",
-      EXIT.USAGE,
+      EXIT.BAD_ARGUMENTS,
       `Report not found: ${file ?? "(none given)"}`,
       "Run tw2sx plan <path> first.",
     );
@@ -268,7 +267,7 @@ const openReport = (args: Args): Report | Failure => {
   if (!report)
     return fail(
       "E_BAD_REPORT",
-      EXIT.USAGE,
+      EXIT.BAD_ARGUMENTS,
       `Not a tw2sx report: ${file}`,
       "Regenerate it with tw2sx plan.",
     );
@@ -282,10 +281,9 @@ const printSkips = (skips: SkipLine[], shown: SkipLine[]): void => {
 };
 
 export const skippedCommand = (args: Args, out: Output): CommandResult => {
-  // Bare `--json` with no value lists the field names (the `gh` pattern).
-  if (flagBare(args, "json")) {
+  if (flagWithoutValue(args, "json")) {
     console.log(SKIP_FIELDS.join("\n"));
-    return { exit: EXIT.CLEAN };
+    return { exit: EXIT.NOTHING_SKIPPED };
   }
 
   const report = openReport(args);
@@ -297,7 +295,7 @@ export const skippedCommand = (args: Args, out: Output): CommandResult => {
   if (out.json) emit(shown.map(f => project(f, out.fields)));
   else printSkips(skips, shown);
 
-  return { exit: skips.length > 0 ? EXIT.SKIPPED : EXIT.CLEAN };
+  return { exit: skips.length > 0 ? EXIT.SOME_SKIPPED : EXIT.NOTHING_SKIPPED };
 };
 
 export { isError };

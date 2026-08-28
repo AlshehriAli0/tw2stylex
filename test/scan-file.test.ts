@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { scanFile, type Usage } from "../src/extract.ts";
+import { scanFile, type Usage } from "../src/scan-file.ts";
 
 const scan = (code: string): Usage[] => scanFile(code, "x.tsx").usages;
 const first = (code: string): Usage | undefined => scan(code)[0];
@@ -161,24 +161,24 @@ describe("an element with two styling sources cannot take a props spread", () =>
 
 describe("only host elements can receive a props spread", () => {
   test.each(["div", "span", "button", "my-element"])("%s is a host element", tag => {
-    expect(first(`<${tag} className="flex" />`)?.hostElement).toBe(true);
+    expect(first(`<${tag} className="flex" />`)?.onHostElement).toBe(true);
   });
 
   test.each(["Card", "MyCard", "Foo.Bar"])("%s is a component", tag => {
-    expect(first(`<${tag} className="flex" />`)?.hostElement).toBe(false);
+    expect(first(`<${tag} className="flex" />`)?.onHostElement).toBe(false);
   });
 });
 
 describe("the byte range covers the whole attribute", () => {
   test("replacing that range swaps className for a spread and nothing else", () => {
     const code = `<div className="flex" id="x" />`;
-    const range = first(code)?.range ?? [0, 0];
+    const range = first(code)?.attributeRange ?? [0, 0];
     expect(code.slice(range[0], range[1])).toBe(`className="flex"`);
   });
 
   test("a cva usage has no range, because there is no attribute to replace", () => {
     const usages = scan(`const v = cva("flex");`);
-    expect(usages[0]?.range).toBeUndefined();
+    expect(usages[0]?.attributeRange).toBeUndefined();
   });
 });
 

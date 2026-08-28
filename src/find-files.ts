@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 
-/** Find the project's Tailwind entry CSS by looking for an @import "tailwindcss". */
 export const findEntryCss = (from: string): string | undefined => {
   const roots = [from, ...ancestors(from)];
   for (const dir of roots) {

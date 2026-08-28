@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Usage, UsageKind } from "../src/extract.ts";
+import type { Usage, UsageKind } from "../src/scan-file.ts";
 import { styleNameFor } from "../src/style-name.ts";
 
 const usage = (kind: UsageKind, over: Partial<Usage> = {}): Usage => ({

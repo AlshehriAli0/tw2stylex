@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { flattenConditions, printCreate, toStyle, type Style } from "../src/emit.ts";
-import type { ConditionPath, ResolvedClasses } from "../src/reshape.ts";
+import type { ConditionPath, ResolvedClasses } from "../src/classes-to-css.ts";
+import { flattenConditions, printCreate, toStyle, type Style } from "../src/css-to-stylex.ts";
 
 /** Build a ResolvedClasses by hand so these tests need no Tailwind design system. */
 const resolved = (groups: Array<[ConditionPath, Record<string, string>]>): ResolvedClasses => {

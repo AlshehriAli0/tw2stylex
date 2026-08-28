@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import type { Mismatch } from "../src/check.ts";
 import {
   renderReport,
   toSkipLine,
@@ -8,7 +9,6 @@ import {
   type SkipLine,
 } from "../src/report.ts";
 import type { Fix, Reason, Skip } from "../src/skip.ts";
-import type { Mismatch } from "../src/verify.ts";
 
 const skip = (reason: Reason, extra: Partial<Skip> = {}): Skip => ({
   reason,

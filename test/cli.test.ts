@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 
-import { EXIT } from "../src/exit.ts";
+import { EXIT } from "../src/fail.ts";
 import { FIXES, REASONS } from "../src/skip.ts";
 
 const repo = path.join(import.meta.dir, "..");
@@ -21,23 +21,23 @@ const run = (...args: string[]): Run => runWith("bun", args);
 describe("the CLI tells you how to use it before you get anything wrong", () => {
   test("help exits clean and lists every command", () => {
     const r = run("help");
-    expect(r.code).toBe(EXIT.CLEAN);
+    expect(r.code).toBe(EXIT.NOTHING_SKIPPED);
     for (const c of ["explain", "plan", "skipped", "apply"]) expect(r.out).toContain(`tw2sx ${c}`);
   });
 
   test("no arguments prints the same help but exits 2, so a script notices", () => {
     const r = run();
-    expect(r.code).toBe(EXIT.USAGE);
+    expect(r.code).toBe(EXIT.BAD_ARGUMENTS);
     expect(r.out).toContain("COMMANDS");
   });
 
   test("--help works on any command", () => {
-    expect(run("plan", "--help").code).toBe(EXIT.CLEAN);
+    expect(run("plan", "--help").code).toBe(EXIT.NOTHING_SKIPPED);
   });
 
   test("an unknown command names itself and points at help", () => {
     const r = run("planx", "src");
-    expect(r.code).toBe(EXIT.USAGE);
+    expect(r.code).toBe(EXIT.BAD_ARGUMENTS);
     expect(r.err).toContain("Unknown command: planx");
     expect(r.err).toContain("E_UNKNOWN_COMMAND");
   });
@@ -60,10 +60,10 @@ describe("the CLI tells you how to use it before you get anything wrong", () => 
 
 describe("exit codes are what a script should branch on", () => {
   test.each([
-    [["explain", "flex p-4", "--css", css], EXIT.CLEAN],
-    [["explain", "dark:text-white", "--css", css], EXIT.SKIPPED],
-    [["explain", "--css", css], EXIT.USAGE],
-    [["plan", "/no/such/path", "--css", css], EXIT.USAGE],
+    [["explain", "flex p-4", "--css", css], EXIT.NOTHING_SKIPPED],
+    [["explain", "dark:text-white", "--css", css], EXIT.SOME_SKIPPED],
+    [["explain", "--css", css], EXIT.BAD_ARGUMENTS],
+    [["plan", "/no/such/path", "--css", css], EXIT.BAD_ARGUMENTS],
   ])("%p exits %p", (args, expected) => {
     expect(run(...args).code).toBe(expected);
   });
@@ -73,7 +73,7 @@ describe("exit codes are what a script should branch on", () => {
   // it does on plan and apply.
   test("bare --json on skipped lists fields instead of reading the report", () => {
     const r = run("skipped", "/no/such/report.json", "--json");
-    expect(r.code).toBe(EXIT.CLEAN);
+    expect(r.code).toBe(EXIT.NOTHING_SKIPPED);
     expect(r.out.split("\n")).toContain("reason");
   });
 
@@ -81,7 +81,7 @@ describe("exit codes are what a script should branch on", () => {
     const r = run("skipped", "/no/such/report.json", "--json=reason");
     expect(r.out).toBe("");
     const body: unknown = JSON.parse(r.err);
-    expect(body).toMatchObject({ ok: false, code: "E_NO_REPORT", exit_code: EXIT.USAGE });
+    expect(body).toMatchObject({ ok: false, code: "E_NO_REPORT", exit_code: EXIT.BAD_ARGUMENTS });
   });
 
   test("without --json a failure is still readable prose with a code and a hint", () => {
@@ -107,7 +107,7 @@ describe("the CLI works under Node, not only under Bun", () => {
 
   test("loading the Tailwind design system works under Node", () => {
     const r = runWith("node", ["explain", "bg-brand", "--css", css, "--json"]);
-    expect(r.code).toBe(EXIT.CLEAN);
+    expect(r.code).toBe(EXIT.NOTHING_SKIPPED);
     const body: unknown = JSON.parse(r.out);
     expect(body).toMatchObject({ ok: true, stylex: { backgroundColor: "var(--color-brand)" } });
   });

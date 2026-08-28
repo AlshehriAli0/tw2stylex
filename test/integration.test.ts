@@ -1,11 +1,11 @@
 import { describe, expect, test, beforeAll } from "bun:test";
 import path from "node:path";
 
-import { toStyle, printCreate } from "../src/emit.ts";
-import { scanFile } from "../src/extract.ts";
-import { resolveClasses, selfSelector } from "../src/reshape.ts";
-import { loadDesignSystem, type LoadedSystem } from "../src/resolve.ts";
-import { checkStyle, compileStyleX } from "../src/verify.ts";
+import { checkStyle, compileStyleX } from "../src/check.ts";
+import { resolveClasses, selfSelector } from "../src/classes-to-css.ts";
+import { toStyle, printCreate } from "../src/css-to-stylex.ts";
+import { scanFile } from "../src/scan-file.ts";
+import { loadDesignSystem, type LoadedSystem } from "../src/tailwind.ts";
 
 const FIXTURE = path.join(import.meta.dir, "fixture.css");
 let sys: LoadedSystem;

@@ -2,8 +2,8 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import path from "node:path";
 
 import { convert } from "../src/convert.ts";
-import { loadDesignSystem, type DesignSystem, type LoadedSystem } from "../src/resolve.ts";
 import { DEFAULT_FIX, fixFor, REASONS, type Reason } from "../src/skip.ts";
+import { loadDesignSystem, type DesignSystem, type LoadedSystem } from "../src/tailwind.ts";
 
 const FIXTURE = path.join(import.meta.dir, "fixture.css");
 let sys: LoadedSystem;

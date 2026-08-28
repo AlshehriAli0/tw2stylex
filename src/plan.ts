@@ -1,11 +1,11 @@
 import fs from "node:fs";
 
 import { convert } from "./convert.ts";
-import { printCreate, type Style } from "./emit.ts";
-import { scanFile } from "./extract.ts";
+import { printCreate, type Style } from "./css-to-stylex.ts";
 import { toSkipLine, type FileResult, type Report } from "./report.ts";
-import { loadDesignSystem, type LoadedSystem } from "./resolve.ts";
+import { scanFile } from "./scan-file.ts";
 import { styleNameFor } from "./style-name.ts";
+import { loadDesignSystem, type LoadedSystem } from "./tailwind.ts";
 
 const verdictFor = (total: number, converted: number, skipped: number): FileResult["verdict"] => {
   if (total === 0) return "unchanged";
@@ -14,10 +14,6 @@ const verdictFor = (total: number, converted: number, skipped: number): FileResu
   return "partial";
 };
 
-/**
- * Convert one file's usages. Every decision about what counts as converted lives in
- * `convert()`, so `plan` and `apply` cannot drift apart on it.
- */
 export const processFile = (sys: LoadedSystem, file: string): FileResult => {
   const { usages } = scanFile(fs.readFileSync(file, "utf8"), file);
   const lines: FileResult["skips"] = [];
@@ -34,7 +30,6 @@ export const processFile = (sys: LoadedSystem, file: string): FileResult => {
     for (const skip of skips) lines.push(toSkipLine(file, usage.loc.line, usage.loc.column, skip));
     mismatches.push(...result.mismatches);
 
-    // A usage converts only when nothing about it was skipped - what `apply` will also do.
     if (skips.length === 0 && result.style) {
       styles[name] = result.style;
       converted += 1;

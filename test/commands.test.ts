@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { parseArgs, type Args } from "../src/args.ts";
+import { isRecord } from "../src/cjs.ts";
 import {
   applyCommand,
   explainCommand,
@@ -15,8 +16,7 @@ import {
   SKIP_FIELDS,
   type CommandResult,
 } from "../src/commands.ts";
-import { EXIT } from "../src/exit.ts";
-import { isRecord } from "../src/interop.ts";
+import { EXIT } from "../src/fail.ts";
 
 /**
  * The command layer: what an agent actually sees. Exit codes, error codes and the shape of
@@ -89,20 +89,20 @@ describe("explain answers about a class string without touching the disk", () =>
     const r = await run("explain flex items-center");
     expect(r.out).toContain("stylex.create");
     expect(r.out).toContain("checked: same declarations as Tailwind");
-    expect(exitOf(r.result)).toBe(EXIT.CLEAN);
+    expect(exitOf(r.result)).toBe(EXIT.NOTHING_SKIPPED);
   });
 
   test("a skipped class exits 1 and says why and what to do", async () => {
     const r = await run("explain dark:text-white");
     expect(r.out).toContain("skipped parent-state");
     expect(r.out).toContain("fix:");
-    expect(exitOf(r.result)).toBe(EXIT.SKIPPED);
+    expect(exitOf(r.result)).toBe(EXIT.SOME_SKIPPED);
   });
 
   test("no classes is a usage error with a runnable hint", async () => {
     const r = await run("explain");
     expect(codeOf(r.result)).toBe("E_NO_INPUT");
-    expect(exitOf(r.result)).toBe(EXIT.USAGE);
+    expect(exitOf(r.result)).toBe(EXIT.BAD_ARGUMENTS);
     expect(isError(r.result) && r.result.hint).toContain("tw2sx explain");
   });
 
@@ -147,13 +147,13 @@ describe("plan writes a report and says where it went", () => {
   test("skips mean exit 1, and the summary line leads", async () => {
     const r = await run(`plan ${dir}/src --out ${path.join(dir, "r2.json")}`);
     expect(r.out.split("\n")[0]).toContain("usages");
-    expect(exitOf(r.result)).toBe(EXIT.SKIPPED);
+    expect(exitOf(r.result)).toBe(EXIT.SOME_SKIPPED);
   });
 
   test("a file with nothing to skip exits 0", async () => {
     const r = await run(`plan ${dir}/src/clean.tsx --out ${path.join(dir, "r3.json")}`);
     expect(r.out).toContain("MISMATCHES: 0");
-    expect(exitOf(r.result)).toBe(EXIT.CLEAN);
+    expect(exitOf(r.result)).toBe(EXIT.NOTHING_SKIPPED);
   });
 
   test("without --out the report still lands somewhere predictable", async () => {
@@ -173,7 +173,7 @@ describe("plan writes a report and says where it went", () => {
   test("a missing path is a usage error, named exactly", async () => {
     const r = await run(`plan ${dir}/does-not-exist`);
     expect(codeOf(r.result)).toBe("E_NO_SUCH_PATH");
-    expect(exitOf(r.result)).toBe(EXIT.USAGE);
+    expect(exitOf(r.result)).toBe(EXIT.BAD_ARGUMENTS);
   });
 
   test("no path at all is a different error from a wrong path", async () => {
@@ -214,7 +214,7 @@ describe("skipped re-reads a report without redoing the work", () => {
   test("bare --json lists the fields you can ask for", async () => {
     const r = await run("skipped --json");
     expect(r.out.split("\n")).toEqual(SKIP_FIELDS);
-    expect(exitOf(r.result)).toBe(EXIT.CLEAN);
+    expect(exitOf(r.result)).toBe(EXIT.NOTHING_SKIPPED);
   });
 
   test("--reason keeps only that reason", async () => {
@@ -234,7 +234,7 @@ describe("skipped re-reads a report without redoing the work", () => {
   test("a filter that matches nothing exits 0 and prints nothing", async () => {
     const r = await run(`skipped ${report} --reason stylex-compile-error`);
     expect(r.out).toBe("");
-    expect(exitOf(r.result)).toBe(EXIT.CLEAN);
+    expect(exitOf(r.result)).toBe(EXIT.NOTHING_SKIPPED);
   });
 
   test("--limit truncates and says what it truncated", async () => {
@@ -253,7 +253,7 @@ describe("skipped re-reads a report without redoing the work", () => {
     const other = write("other.json", `{"hello":"world"}`);
     const r = await run(`skipped ${other}`);
     expect(codeOf(r.result)).toBe("E_BAD_REPORT");
-    expect(exitOf(r.result)).toBe(EXIT.USAGE);
+    expect(exitOf(r.result)).toBe(EXIT.BAD_ARGUMENTS);
   });
 });
 
@@ -284,7 +284,7 @@ describe("apply is a dry run until told otherwise", () => {
 
   test("exit 1 when anything was left for the user", async () => {
     const r = await run(`apply ${dir}/src`);
-    expect(exitOf(r.result)).toBe(EXIT.SKIPPED);
+    expect(exitOf(r.result)).toBe(EXIT.SOME_SKIPPED);
   });
 });
 
@@ -344,7 +344,7 @@ describe("apply --write refuses to run on a dirty tree", () => {
     fs.appendFileSync(target, "// edited\n");
     const result = await runIn(`apply ${target} --write`);
     expect(codeOf(result)).toBe("E_DIRTY_TREE");
-    expect(exitOf(result)).toBe(EXIT.PRECONDITION);
+    expect(exitOf(result)).toBe(EXIT.NOT_READY);
     expect(isError(result) && result.message).toContain("a.tsx");
   });
 
@@ -381,7 +381,7 @@ describe("entry css discovery fails loudly rather than guessing", () => {
       const args = parseArgs(["plan", path.join(bare, "a.tsx")]);
       const result = await planCommand(args, readOutput(args));
       expect(codeOf(result)).toBe("E_NO_ENTRY_CSS");
-      expect(exitOf(result)).toBe(EXIT.PRECONDITION);
+      expect(exitOf(result)).toBe(EXIT.NOT_READY);
       expect(isError(result) && result.hint).toContain("--css");
     } finally {
       fs.rmSync(bare, { recursive: true, force: true });
@@ -391,11 +391,11 @@ describe("entry css discovery fails loudly rather than guessing", () => {
 
 describe("exit codes mean one thing each", () => {
   test.each([
-    [EXIT.CLEAN, 0],
-    [EXIT.SKIPPED, 1],
-    [EXIT.USAGE, 2],
-    [EXIT.PRECONDITION, 3],
-    [EXIT.INTERNAL, 10],
+    [EXIT.NOTHING_SKIPPED, 0],
+    [EXIT.SOME_SKIPPED, 1],
+    [EXIT.BAD_ARGUMENTS, 2],
+    [EXIT.NOT_READY, 3],
+    [EXIT.OUR_BUG, 10],
   ])("%p is %p and does not move", (actual, expected) => {
     expect(actual).toBe(expected);
   });

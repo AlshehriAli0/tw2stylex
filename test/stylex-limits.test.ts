@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { BANNED_SHORTHANDS } from "../src/reshape.ts";
-import { compileStyleX } from "../src/verify.ts";
+import { compileStyleX } from "../src/check.ts";
+import { BANNED_SHORTHANDS } from "../src/classes-to-css.ts";
 
 /**
  * What StyleX will and will not accept, asked of StyleX itself rather than copied into a

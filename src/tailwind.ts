@@ -2,13 +2,8 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
-import { cjsDefault, isRecord, requireExport } from "./interop.ts";
+import { cjsDefault, isRecord, requireExport } from "./cjs.ts";
 
-/**
- * Loads the *project's own* Tailwind design system, so `@theme`, `@utility`,
- * `@custom-variant`, `@plugin` and `@config` are all in scope. Prior converters
- * bundle a stock theme.css and silently resolve project tokens to stock values.
- */
 export type DesignSystem = {
   candidatesToCss: (classes: string[]) => Array<string | null>;
   getClassOrder: (classes: string[]) => Array<[string, bigint | null]>;
@@ -26,14 +21,12 @@ type PackageMeta = {
 
 const asString = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
 
-/** Split "@scope/pkg/sub/path" into its package name and the remainder. */
 const splitSpecifier = (id: string): { pkg: string; rest: string } => {
   const parts = id.split("/");
   const nameLength = id.startsWith("@") ? 2 : 1;
   return { pkg: parts.slice(0, nameLength).join("/"), rest: parts.slice(nameLength).join("/") };
 };
 
-/** Pick a CSS file out of an exports entry, honouring the `style` condition. */
 const cssFromExports = (entry: unknown): string | undefined => {
   if (typeof entry === "string") return entry.endsWith(".css") ? entry : undefined;
   if (!isRecord(entry)) return undefined;
@@ -67,24 +60,29 @@ type Resolver = {
 const makeResolver = (base: string): Resolver => {
   const req = createRequire(path.join(base, "__tw2sx__.js"));
 
-  /**
-   * Locate a package's directory. `require.resolve('pkg/package.json')` fails on packages
-   * whose `exports` map omits it (Node enforces this; Bun does not), so walk node_modules.
-   */
-  const packageRoot = (pkg: string): string => {
+  const inNodeModules = (pkg: string): string | undefined => {
     for (const dir of req.resolve.paths(pkg) ?? []) {
       const candidate = path.join(dir, pkg);
       if (fs.existsSync(path.join(candidate, "package.json"))) return candidate;
     }
-    // Fall back to the main entry and walk up to its package.json.
+    return undefined;
+  };
+
+  const aboveMainEntry = (pkg: string): string | undefined => {
     let cur = path.dirname(req.resolve(pkg));
     for (let i = 0; i < 8; i++) {
       if (fs.existsSync(path.join(cur, "package.json"))) return cur;
       const next = path.dirname(cur);
-      if (next === cur) break;
+      if (next === cur) return undefined;
       cur = next;
     }
-    throw new Error(`cannot locate package "${pkg}" from ${base}`);
+    return undefined;
+  };
+
+  const packageRoot = (pkg: string): string => {
+    const root = inNodeModules(pkg) ?? aboveMainEntry(pkg);
+    if (root === undefined) throw new Error(`cannot locate package "${pkg}" from ${base}`);
+    return root;
   };
 
   const resolveRelative = (id: string, from: string): string => {
@@ -94,7 +92,6 @@ const makeResolver = (base: string): Resolver => {
     return file;
   };
 
-  /** A subpath import like "pkg/theme.css" or "pkg/prefix". */
   const resolveSubpath = (root: string, meta: PackageMeta, rest: string): string => {
     const direct = path.join(root, rest);
     if (fs.existsSync(direct)) return direct;
@@ -105,7 +102,6 @@ const makeResolver = (base: string): Resolver => {
     return direct;
   };
 
-  /** A bare package import: exports["."] with a `style` condition, then style/main, then index.css. */
   const resolvePackageRootCss = (id: string, root: string, meta: PackageMeta): string => {
     const exportsMap = isRecord(meta.exports) ? meta.exports : {};
     const mainCss = asString(meta.main);
@@ -119,7 +115,6 @@ const makeResolver = (base: string): Resolver => {
     return file;
   };
 
-  /** Resolve a stylesheet specifier the way a CSS bundler would. */
   const resolveCss = (id: string, from: string): string => {
     if (id.startsWith(".") || path.isAbsolute(id)) return resolveRelative(id, from);
     const { pkg, rest } = splitSpecifier(id);
