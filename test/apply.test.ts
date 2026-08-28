@@ -1,0 +1,298 @@
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import { applyFile, dirtyFiles } from "../src/apply.ts";
+import { scanFile } from "../src/extract.ts";
+import { processFile } from "../src/pipeline.ts";
+import { loadDesignSystem, type LoadedSystem } from "../src/resolve.ts";
+
+/**
+ * The write path. Everything here runs against real files, because the bugs worth catching in
+ * `apply` are about bytes on disk: a half-written file, a rewrite that moved code it should not
+ * have touched, a second run that undoes the first.
+ *
+ * The workspace lives inside the repo so `tailwindcss` resolves the way it does for a user.
+ */
+let dir: string;
+let sys: LoadedSystem;
+
+const write = (name: string, code: string): string => {
+  const file = path.join(dir, name);
+  fs.writeFileSync(file, code);
+  return file;
+};
+
+beforeAll(async () => {
+  dir = fs.mkdtempSync(path.join(import.meta.dir, "tmp-apply-"));
+  fs.copyFileSync(path.join(import.meta.dir, "fixture.css"), path.join(dir, "index.css"));
+  sys = await loadDesignSystem(path.join(dir, "index.css"));
+});
+
+afterAll(() => {
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+describe("a dry run is genuinely dry", () => {
+  test("the file on disk is byte-identical afterwards", () => {
+    const code = `export const A = () => <div className="flex p-4" />;\n`;
+    const file = write("dry.tsx", code);
+
+    const result = applyFile(sys, file, false);
+
+    expect(result.written).toBe(false);
+    expect(result.rewritten).toBe(1);
+    expect(fs.readFileSync(file, "utf8")).toBe(code);
+  });
+
+  test("the result carries the full proposed file, so nothing has to be guessed", () => {
+    const file = write("dry2.tsx", `export const A = () => <div className="flex" />;\n`);
+    const { diff } = applyFile(sys, file, false);
+    expect(diff).toContain("stylex.props(styles.el1)");
+    expect(diff).toContain("stylex.create");
+  });
+});
+
+describe("writing produces a file that is still the same program", () => {
+  const source = `import React from 'react';
+
+export const Card = () => (
+  <div className="flex items-center p-4">
+    <span className="text-sm">hi</span>
+  </div>
+);
+`;
+
+  test("every className that converted becomes a props spread", () => {
+    const file = write("card.tsx", source);
+    const result = applyFile(sys, file, true);
+    const out = fs.readFileSync(file, "utf8");
+
+    expect(result.written).toBe(true);
+    expect(result.rewritten).toBe(2);
+    expect(out).toContain("{...stylex.props(styles.el1)}");
+    expect(out).toContain("{...stylex.props(styles.el2)}");
+    expect(out).not.toContain("className=");
+  });
+
+  test("the import and the create call are both added", () => {
+    const file = write("card2.tsx", source);
+    applyFile(sys, file, true);
+    const out = fs.readFileSync(file, "utf8");
+    expect(out).toContain(`import * as stylex from '@stylexjs/stylex';`);
+    expect(out).toContain("const styles = stylex.create({");
+  });
+
+  test("code outside the className attributes is untouched", () => {
+    const file = write("card3.tsx", source);
+    applyFile(sys, file, true);
+    const out = fs.readFileSync(file, "utf8");
+    expect(out).toContain(`import React from 'react';`);
+    expect(out).toContain("export const Card = () => (");
+    expect(out).toContain(">hi<");
+  });
+
+  test("the result still parses as JSX", () => {
+    const file = write("card4.tsx", source);
+    applyFile(sys, file, true);
+    // scanFile throws on unparseable input; reaching hasStyleX means it read cleanly.
+    expect(scanFile(fs.readFileSync(file, "utf8"), file).hasStyleX).toBe(true);
+  });
+
+  test("a style name in the output has a matching entry in the create call", () => {
+    const file = write("card5.tsx", source);
+    applyFile(sys, file, true);
+    const out = fs.readFileSync(file, "utf8");
+    for (const name of ["el1", "el2"]) {
+      expect(out).toContain(`stylex.props(styles.${name})`);
+      expect(out).toContain(`${name}: {`);
+    }
+  });
+});
+
+describe("running twice changes nothing the second time", () => {
+  test("an already-migrated file is recognised and left alone", () => {
+    const file = write("twice.tsx", `export const A = () => <div className="flex p-4" />;\n`);
+    applyFile(sys, file, true);
+    const afterFirst = fs.readFileSync(file, "utf8");
+
+    const second = applyFile(sys, file, true);
+
+    expect(second.reason).toBe("already-stylex");
+    expect(second.rewritten).toBe(0);
+    expect(second.written).toBe(false);
+    expect(fs.readFileSync(file, "utf8")).toBe(afterFirst);
+  });
+
+  test("a file that already imports stylex is never touched, even with classes left in it", () => {
+    const code = `import * as stylex from '@stylexjs/stylex';\nexport const A = () => <div className="flex" />;\n`;
+    const file = write("mixed.tsx", code);
+    const result = applyFile(sys, file, true);
+    expect(result.reason).toBe("already-stylex");
+    expect(fs.readFileSync(file, "utf8")).toBe(code);
+  });
+});
+
+describe("apply refuses everything it cannot rewrite safely", () => {
+  test.each([
+    ["a component, not a host element", `export const A = () => <Card className="flex p-4" />;`],
+    [
+      "an element that also has a style prop",
+      `export const A = () => <div className="flex" style={{ top: 0 }} />;`,
+    ],
+    [
+      "a class the design system does not know",
+      `export const A = () => <div className="not-a-class" />;`,
+    ],
+    [
+      "a class that needs an ancestor",
+      `export const A = () => <div className="dark:text-white" />;`,
+    ],
+    ["a descendant selector", `export const A = () => <div className="[&_svg]:size-4" />;`],
+    ["a runtime-built class string", `export const A = ({ x }) => <div className={x} />;`],
+    ["no classes at all", `export const A = () => <div id="x" />;`],
+  ])("%s is left in place", (_name, code) => {
+    const file = write(`refuse-${_name.replace(/\W+/g, "-")}.tsx`, `${code}\n`);
+    const before = fs.readFileSync(file, "utf8");
+
+    const result = applyFile(sys, file, true);
+
+    expect(result.rewritten).toBe(0);
+    expect(result.reason).toBe("nothing-convertible");
+    expect(fs.readFileSync(file, "utf8")).toBe(before);
+  });
+
+  test("nothing convertible means nothing written, not an empty write", () => {
+    const file = write("none.tsx", `export const A = () => <div className="not-a-class" />;\n`);
+    applyFile(sys, file, true);
+    expect(fs.readFileSync(file, "utf8")).not.toContain("stylex");
+  });
+
+  // ADR-0002 at the file level: a usage converts whole or not at all.
+  test("one bad class in an attribute leaves that whole attribute alone", () => {
+    const file = write(
+      "partial.tsx",
+      `export const A = () => <div className="flex p-4 dark:text-white" />;\n`,
+    );
+    applyFile(sys, file, true);
+    expect(fs.readFileSync(file, "utf8")).toContain(`className="flex p-4 dark:text-white"`);
+  });
+
+  test("a convertible element next to an unconvertible one is still converted", () => {
+    const file = write(
+      "neighbours.tsx",
+      `export const A = () => (<div className="dark:text-white"><b className="flex" /></div>);\n`,
+    );
+    const result = applyFile(sys, file, true);
+    const out = fs.readFileSync(file, "utf8");
+
+    expect(result.rewritten).toBe(1);
+    expect(result.skipped).toBe(1);
+    expect(out).toContain(`className="dark:text-white"`);
+    expect(out).toContain("stylex.props(styles.el2)");
+  });
+});
+
+describe("cva definitions are reported but never rewritten in place", () => {
+  test("a cva call is left as source, because there is no attribute to replace", () => {
+    const code = `import { cva } from 'class-variance-authority';\nexport const v = cva("flex p-4", { variants: { size: { sm: "p-1" } } });\n`;
+    const file = write("cva.tsx", code);
+    const result = applyFile(sys, file, true);
+    expect(result.rewritten).toBe(0);
+    expect(fs.readFileSync(file, "utf8")).toBe(code);
+  });
+});
+
+describe("plan and apply agree on what converted", () => {
+  const source = `export const A = () => (
+  <div className="flex p-4">
+    <span className="dark:text-white" />
+    <b className="text-sm" />
+    <Card className="flex" />
+  </div>
+);
+`;
+
+  test("apply never rewrites a usage plan reported as skipped", () => {
+    const file = write("agree.tsx", source);
+    const planned = processFile(sys, file);
+    const names = new Set([...(planned.source ?? "").matchAll(/^\s{2}(\w+): \{/gm)].map(m => m[1]));
+
+    applyFile(sys, file, true);
+    const rewrittenNames = [
+      ...fs.readFileSync(file, "utf8").matchAll(/stylex\.props\(styles\.(\w+)\)/g),
+    ].map(m => m[1]);
+
+    expect(rewrittenNames.length).toBeGreaterThan(0);
+    for (const name of rewrittenNames) expect(names.has(name)).toBe(true);
+  });
+
+  test("both sides number the usages the same way", () => {
+    // `plan` reports styles.el3; a user reading the report must find styles.el3 after apply.
+    const file = write("agree2.tsx", source);
+    const planned = processFile(sys, file);
+    applyFile(sys, file, true);
+    const out = fs.readFileSync(file, "utf8");
+
+    expect(planned.source).toContain("el1: {");
+    expect(out).toContain("stylex.props(styles.el1)");
+    expect(planned.source).toContain("el3: {");
+    expect(out).toContain("stylex.props(styles.el3)");
+  });
+});
+
+describe("the write itself is atomic", () => {
+  test("no temp file is left behind", () => {
+    const file = write("atomic.tsx", `export const A = () => <div className="flex" />;\n`);
+    applyFile(sys, file, true);
+    expect(fs.readdirSync(dir).filter(f => f.includes("tw2sx-"))).toEqual([]);
+  });
+
+  test("the file is never observed empty - the rename replaces it whole", () => {
+    const file = write("atomic2.tsx", `export const A = () => <div className="flex" />;\n`);
+    applyFile(sys, file, true);
+    expect(fs.readFileSync(file, "utf8").length).toBeGreaterThan(0);
+  });
+});
+
+describe("the dirty-tree guard reads real git state", () => {
+  let repo: string;
+
+  beforeAll(() => {
+    repo = fs.mkdtempSync(path.join(os.tmpdir(), "tw2sx-git-"));
+    const git = (...a: string[]): void => {
+      execFileSync("git", a, { cwd: repo, stdio: "ignore" });
+    };
+    git("init", "-q");
+    git("config", "user.email", "t@t.t");
+    git("config", "user.name", "t");
+    fs.writeFileSync(path.join(repo, "a.txt"), "one\n");
+    git("add", "-A");
+    git("commit", "-qm", "init");
+  });
+
+  afterAll(() => {
+    fs.rmSync(repo, { recursive: true, force: true });
+  });
+
+  test("a clean repo reports nothing uncommitted", () => {
+    expect(dirtyFiles(repo)).toEqual([]);
+  });
+
+  test("an edited file shows up", () => {
+    fs.writeFileSync(path.join(repo, "a.txt"), "two\n");
+    expect(dirtyFiles(repo)?.some(l => l.includes("a.txt"))).toBe(true);
+  });
+
+  // Not a repo is not the same as clean: apply must not treat "cannot tell" as "safe".
+  test("outside a repo the answer is null, not an empty list", () => {
+    const loose = fs.mkdtempSync(path.join(os.tmpdir(), "tw2sx-nogit-"));
+    try {
+      expect(dirtyFiles(loose)).toBeNull();
+    } finally {
+      fs.rmSync(loose, { recursive: true, force: true });
+    }
+  });
+});

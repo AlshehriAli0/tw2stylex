@@ -1,0 +1,114 @@
+import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+
+import { EXIT } from "../src/exit.ts";
+import { FIXES, REASONS } from "../src/skip.ts";
+
+const repo = path.join(import.meta.dir, "..");
+const cli = path.join(repo, "src/cli.ts");
+const css = path.join(repo, "test/fixture.css");
+
+type Run = { code: number; out: string; err: string };
+
+const runWith = (runtime: string, args: string[]): Run => {
+  const r = spawnSync(runtime, [cli, ...args], { cwd: repo, encoding: "utf8" });
+  return { code: r.status ?? -1, out: r.stdout, err: r.stderr };
+};
+
+const run = (...args: string[]): Run => runWith("bun", args);
+
+describe("the CLI tells you how to use it before you get anything wrong", () => {
+  test("help exits clean and lists every command", () => {
+    const r = run("help");
+    expect(r.code).toBe(EXIT.CLEAN);
+    for (const c of ["explain", "plan", "skipped", "apply"]) expect(r.out).toContain(`tw2sx ${c}`);
+  });
+
+  test("no arguments prints the same help but exits 2, so a script notices", () => {
+    const r = run();
+    expect(r.code).toBe(EXIT.USAGE);
+    expect(r.out).toContain("COMMANDS");
+  });
+
+  test("--help works on any command", () => {
+    expect(run("plan", "--help").code).toBe(EXIT.CLEAN);
+  });
+
+  test("an unknown command names itself and points at help", () => {
+    const r = run("planx", "src");
+    expect(r.code).toBe(EXIT.USAGE);
+    expect(r.err).toContain("Unknown command: planx");
+    expect(r.err).toContain("E_UNKNOWN_COMMAND");
+  });
+
+  // The help is the only place an agent learns the vocabulary, so it has to be complete.
+  test("every reason code appears in the help", () => {
+    const help = run("help").out;
+    for (const reason of REASONS) expect(help).toContain(reason);
+  });
+
+  test("every fix type appears in the help with its meaning", () => {
+    const help = run("help").out;
+    for (const fix of FIXES) expect(help).toContain(fix);
+  });
+
+  test("the help says plainly that nothing is written without --write", () => {
+    expect(run("help").out).toContain("nothing writes unless you say --write");
+  });
+});
+
+describe("exit codes are what a script should branch on", () => {
+  test.each([
+    [["explain", "flex p-4", "--css", css], EXIT.CLEAN],
+    [["explain", "dark:text-white", "--css", css], EXIT.SKIPPED],
+    [["explain", "--css", css], EXIT.USAGE],
+    [["plan", "/no/such/path", "--css", css], EXIT.USAGE],
+  ])("%p exits %p", (args, expected) => {
+    expect(run(...args).code).toBe(expected);
+  });
+
+  // `skipped --json` with no value is the `gh` pattern: it lists the field names and never
+  // looks at the report. Pinned because it makes `--json` mean something different here than
+  // it does on plan and apply.
+  test("bare --json on skipped lists fields instead of reading the report", () => {
+    const r = run("skipped", "/no/such/report.json", "--json");
+    expect(r.code).toBe(EXIT.CLEAN);
+    expect(r.out.split("\n")).toContain("reason");
+  });
+
+  test("a failure prints its envelope to stderr, leaving stdout parseable", () => {
+    const r = run("skipped", "/no/such/report.json", "--json=reason");
+    expect(r.out).toBe("");
+    const body: unknown = JSON.parse(r.err);
+    expect(body).toMatchObject({ ok: false, code: "E_NO_REPORT", exit_code: EXIT.USAGE });
+  });
+
+  test("without --json a failure is still readable prose with a code and a hint", () => {
+    const r = run("skipped", "/no/such/report.json");
+    expect(r.err).toContain("tw2sx: Report not found");
+    expect(r.err).toContain("hint: Run tw2sx plan");
+    expect(r.err).toContain("code: E_NO_REPORT");
+  });
+});
+
+/**
+ * The published binary runs under Node, the tests run under Bun, and the two disagree about
+ * CommonJS. That gap once shipped a build where every command threw on the first `require`.
+ */
+describe("the CLI works under Node, not only under Bun", () => {
+  test("explain produces the same output under both runtimes", () => {
+    const args = ["explain", "flex items-center p-4", "--css", css];
+    const bun = runWith("bun", args);
+    const node = runWith("node", args);
+    expect(node.code).toBe(bun.code);
+    expect(node.out).toBe(bun.out);
+  });
+
+  test("loading the Tailwind design system works under Node", () => {
+    const r = runWith("node", ["explain", "bg-brand", "--css", css, "--json"]);
+    expect(r.code).toBe(EXIT.CLEAN);
+    const body: unknown = JSON.parse(r.out);
+    expect(body).toMatchObject({ ok: true, stylex: { backgroundColor: "var(--color-brand)" } });
+  });
+});
