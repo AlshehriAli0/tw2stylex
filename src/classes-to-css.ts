@@ -194,34 +194,6 @@ type Roots = Array<postcss.Root | null>;
  */
 const parsedCss = new WeakMap<DesignSystem, Map<string, postcss.Root | null>>();
 
-/**
- * What one class contributed, ready to replay. A class that never mentions a `--tw-` slot reads
- * the same whatever it is written beside, so the walk over its rules is done once for the run
- * instead of once per class string that happens to include it — a codebase mentions its couple of
- * thousand classes tens of thousands of times.
- */
-type Emission = { decls: Array<[ConditionPath, string, string]>; skips: Skip[] };
-
-const emissions = new WeakMap<DesignSystem, Map<string, Emission>>();
-
-const emissionsFor = (ds: DesignSystem): Map<string, Emission> => {
-  const found = emissions.get(ds);
-  if (found) return found;
-  const fresh = new Map<string, Emission>();
-  emissions.set(ds, fresh);
-  return fresh;
-};
-
-const SLOT_REFERENCE = "var(--tw-";
-
-const standsAlone = (root: postcss.Root): boolean => {
-  let alone = true;
-  root.walkDecls(decl => {
-    if (decl.value.includes(SLOT_REFERENCE) || decl.prop.startsWith("--tw-")) alone = false;
-  });
-  return alone;
-};
-
 const parsedCssFor = (ds: DesignSystem, classNames: string[]): Roots => {
   const cache = parsedCss.get(ds) ?? new Map<string, postcss.Root | null>();
   parsedCss.set(ds, cache);
@@ -299,21 +271,11 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
   const roots = parsedCssFor(ds, known);
   const slots = twSlots(roots);
 
-  const cache = emissionsFor(ds);
-  let current: Emission = { decls: [], skips: [] };
-
   const record = (path: ConditionPath, property: string, value: string): void => {
-    current.decls.push([path, property, value]);
-  };
-
-  const replay = ({ decls, skips: emitted }: Emission): void => {
-    for (const [path, property, value] of decls) {
-      const key = conditionKey(path);
-      const group = declarations.get(key) ?? { path, props: new Map<string, string>() };
-      declarations.set(key, group);
-      group.props.set(property, value);
-    }
-    for (const skip of emitted) skips.add(skip);
+    const key = conditionKey(path);
+    const group = declarations.get(key) ?? { path, props: new Map<string, string>() };
+    declarations.set(key, group);
+    group.props.set(property, value);
   };
 
   const addDeclaration = (path: ConditionPath, decl: Declaration, className: string): void => {
@@ -321,7 +283,7 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
     if (isInternalSlot) return;
 
     if (decl.important) {
-      current.skips.push({
+      skips.add({
         reason: "important-modifier",
         class: className,
         detail: `"${className}" emits "${decl.prop}: ${decl.value} !important", and StyleX has no !important.`,
@@ -331,7 +293,7 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
     }
 
     if (BANNED_SHORTHANDS.has(decl.prop)) {
-      current.skips.push({
+      skips.add({
         reason: "dropped-shorthand",
         class: className,
         detail: `"${className}" emits the "${decl.prop}" shorthand, which StyleX drops silently.`,
@@ -342,7 +304,7 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
 
     const filled = fillTwSlots(decl.value, slots).trim();
     if (filled.includes("var(--tw-")) {
-      current.skips.push({
+      skips.add({
         reason: "unresolved-variable",
         class: className,
         detail: `"${className}" leaves an unresolved Tailwind slot in "${decl.prop}: ${filled}".`,
@@ -373,7 +335,7 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
     if (readElsewhere) return;
 
     if (!CONDITION_AT_RULES.has(at.name)) {
-      current.skips.push({
+      skips.add({
         reason: "unsupported-at-rule",
         class: className,
         detail: `"${className}" emits @${at.name}, which has no StyleX condition form.`,
@@ -387,7 +349,7 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
   const walkRule = (rule: Rule, path: ConditionPath, className: string): void => {
     const suffix = selfSelector(rule.selector, className);
     if (suffix === null) {
-      current.skips.push(skipForSelector(rule.selector, className));
+      skips.add(skipForSelector(rule.selector, className));
       return;
     }
     walk(rule, suffix ? [...path, suffix] : path, className);
@@ -395,18 +357,7 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
 
   known.forEach((className, i) => {
     const root = roots[i];
-    if (!root) return;
-
-    const remembered = cache.get(className);
-    if (remembered) {
-      replay(remembered);
-      return;
-    }
-
-    current = { decls: [], skips: [] };
-    walk(root, [], className);
-    if (standsAlone(root)) cache.set(className, current);
-    replay(current);
+    if (root) walk(root, [], className);
   });
 
   return { declarations, skips: skips.list };
