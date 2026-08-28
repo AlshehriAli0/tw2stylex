@@ -30,8 +30,6 @@ Ask one question per token group: *does anything override this at runtime?*
   condition key**. Spacing scales, radii, z-index, durations, easings.
 
 Both must live in a `*.stylex.ts` file, be **named exports**, and be the only exports in it.
-Import those files **directly** — a barrel re-export breaks StyleX's static analysis and the
-tokens silently vanish.
 
 ## The `--` literal-key bridge
 

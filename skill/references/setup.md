@@ -1,12 +1,7 @@
 # Setup
 
-Reached from step 0 of the loop. Do this once, before converting anything: an unwired build
-makes every converted component render unstyled, which looks exactly like a bad conversion and
-is not one.
-
-Canonical, always current, worth fetching when this file and reality disagree:
-[stylex-installation.md](https://raw.githubusercontent.com/facebook/stylex/main/packages/docs/static/llm/stylex-installation.md)
-and [stylex-authoring.md](https://raw.githubusercontent.com/facebook/stylex/main/packages/docs/static/llm/stylex-authoring.md).
+Step 0 of the loop, once per project. An unwired build renders every converted component
+unstyled, which looks exactly like a bad conversion and is not one.
 
 ## Is it already installed?
 

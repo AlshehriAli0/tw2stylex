@@ -1,10 +1,9 @@
 ---
 name: migrating-tailwind-to-stylex
 description: >-
-  Migrates Tailwind v4 to StyleX with the tw2sx CLI and hand-resolves the usages it skips.
-  Use when moving a codebase off Tailwind, when StyleX or tw2sx is mentioned, when converting
-  className strings or cva() variant maps, when working a tw2sx report's skips, or when
-  installing StyleX and wiring it into a build.
+  Migrates Tailwind v4 to StyleX with the tw2sx CLI, then hand-resolves what it skips.
+  Use when moving code off Tailwind, when working a tw2sx report, when installing StyleX
+  into a build, or when writing StyleX styles by hand.
 ---
 
 # Migrating Tailwind to StyleX
@@ -13,7 +12,7 @@ description: >-
 when it can prove the CSS declarations come out identical. What it cannot prove, it **skips**
 and reports. The skips are your work.
 
-Pixels must not change. A style you cannot convert stays in the file and goes into your summary.
+Pixels stay identical. A style you cannot convert stays in the file and goes into your summary.
 
 ## The loop
 
@@ -21,12 +20,15 @@ Pixels must not change. A style you cannot convert stays in the file and goes in
 - [ ] 1. `tw2sx plan <path>` — writes a report, edits nothing.
 - [ ] 2. Read `MISMATCHES`. **At 0, continue. Above 0, stop and tell the user** —
       the tool generated StyleX that does not match Tailwind, which is a tw2sx bug.
-- [ ] 3. Fix skips in fix order: every `safe` one, then every
-      `needs-lookup` one, then every `check-first` one.
+- [ ] 3. Fix skips in fix order: every `safe`, then every `needs-lookup`, then every
+      `check-first`, then every `unknown`.
 - [ ] 4. `tw2sx plan <path>` again. Continue only when the skip count dropped and mismatches
       are still 0.
 - [ ] 5. Repeat from 3 until every remaining skip is one you can name a reason for keeping.
-- [ ] 6. Summarise: usages converted, skips resolved, and each skip you kept with why.
+- [ ] 6. Run the project's own typecheck and build. Both clean.
+- [ ] 7. Load a page you changed and read one converted element's computed styles.
+      Typechecking proves the code is valid; only this proves it still renders.
+- [ ] 8. Summarise: usages converted, skips resolved, and each skip you kept with why.
 
 `tw2sx explain "<classes>"` prints the exact StyleX object for any class string and whether it
 verified. Reach for it whenever you are about to write a value from memory.
@@ -53,9 +55,8 @@ Filter with `tw2sx skipped <report.json> --reason <r> --fix <a>`.
 
 ## Silent failure is the house style
 
-StyleX rejects most of what it dislikes by rendering nothing — no error, no warning, just a
-style that is gone. Every rule below exists because breaking it is **silent**, so confirm your
-edits by re-running `tw2sx plan`.
+StyleX rejects most of what it dislikes by rendering nothing: the style is simply gone. Every
+rule below is **silent** when broken, so confirm your edits by re-running `tw2sx plan`.
 
 **Overwriting a property wipes every condition on it.** StyleX merges per
 property, not per property-per-state. The most dangerous difference from Tailwind:
@@ -83,11 +84,11 @@ base value. Without it the condition never applies.
 component's DOM — pass the styles through a `style` prop and let the component apply them to
 its own `<div>`.
 
-**One styling source per element.** An element spreading `stylex.props()` carries no separate
-`className` or `style` attribute; whichever is written second wins.
+**One styling source per element.** The `stylex.props()` spread is the element's only styling
+attribute; where a `className` or `style` sits beside it, whichever is written second wins.
 
-**Conditions nest inside a property, never beside one.** A `:hover` or `@media` key at the top
-level of a style object is the single most common StyleX mistake:
+**Conditions nest inside a property value.** A `:hover` or `@media` key at the top level of a
+style object is the single most common StyleX mistake:
 
 ```js
 // gone: nothing renders
@@ -102,15 +103,25 @@ dropped. Move the value into a `.stylex.ts` `defineVars`/`defineConsts`, or inli
 
 **Import `.stylex.ts` files directly.** A barrel re-export loses them to static analysis.
 
-**Keyframes are file-local.** `stylex.keyframes()`, never a raw `@keyframes` string. Share one
-across files by wrapping its name in a `defineVars` token.
+**Keyframes are file-local.** Define them with `stylex.keyframes()`. Share one across files by
+wrapping its name in a `defineVars` token.
 
 Descendant and child selectors are the one loud failure: `{'> *': …}` throws
 `Invalid pseudo or at-rule.` at build time.
 
-## References
+## What good output looks like
 
-Each is one hop. Reach for them by name.
+The tool is correct, not tasteful. Three things it leaves for you, worth doing as you review
+each file rather than in a pass of their own:
+
+- **Rename the placeholders.** `el1`, `el2` are positions, not names. Call them what the element
+  is — `card`, `label`, `icon`.
+- **Keep styles beside their markup.** Co-location is the point of StyleX; resist collecting a
+  file's styles into a shared module.
+- **Reach for a token before a literal.** A repeated `16` that the project already spells
+  `spacing.medium` should say so — see [tokens.md](references/tokens.md).
+
+## References
 
 - [reason-codes.md](references/reason-codes.md) — one recipe per reason code. Read the section
   for any reason you have not yet handled this session.
