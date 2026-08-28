@@ -65,7 +65,7 @@ export const newSkips = (): Skips => {
   const seen = new Set<string>();
   const list: Skip[] = [];
   const add = (s: Skip): void => {
-    const key = `${s.reason}|${s.class ?? ""}|${s.detail}`;
+    const key = `${s.reason}|${s.class ?? s.detail}`;
     if (seen.has(key)) return;
     seen.add(key);
     list.push(s);
