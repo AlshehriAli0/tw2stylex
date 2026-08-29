@@ -64,9 +64,9 @@ const stubSystem = (css: Record<string, string>): DesignSystem => ({
 });
 
 describe("when our own output is wrong, we say so and convert nothing", () => {
-  // A utility whose emitted selector merely starts with the class name leaves "3d" as the
-  // condition, and StyleX rejects anything that is not a pseudo or an at-rule.
-  const uncompilable = stubSystem({ x: `.x { color: red }\n.x3d { color: blue }\n` });
+  // A compound selector leaves ".other" as the condition, and StyleX rejects anything that is
+  // not a pseudo or an at-rule.
+  const uncompilable = stubSystem({ x: `.x { color: red }\n.x.other { color: blue }\n` });
 
   test("a compile error is reported as our bug, not as a class the user should fix", () => {
     const out = convert(uncompilable, "t", ["x"]);
@@ -141,7 +141,7 @@ describe("one uncompilable style does not poison the batch", () => {
     good: `.good { color: red }\n`,
     alsogood: `.alsogood { display: flex }\n`,
     third: `.third { margin-top: 4px }\n`,
-    bad: `.bad { color: red }\n.bad3d { color: blue }\n`,
+    bad: `.bad { color: red }\n.bad.other { color: blue }\n`,
   });
 
   const classesOf = (...names: string[]): string[][] => names.map(n => [n]);
@@ -164,7 +164,7 @@ describe("one uncompilable style does not poison the batch", () => {
         good: `.good { color: red }\n`,
         alsogood: `.alsogood { display: flex }\n`,
         third: `.third { margin-top: 4px }\n`,
-        bad: `.bad { color: red }\n.bad3d { color: blue }\n`,
+        bad: `.bad { color: red }\n.bad.other { color: blue }\n`,
       });
       warmUp(fresh, classesOf(...order));
       expect(convert(fresh, "x", ["bad"]).style).toBeUndefined();
@@ -182,7 +182,7 @@ describe("one uncompilable style does not poison the batch", () => {
     let sealed = false;
     const base = stubSystem({
       good: `.good { color: red }\n`,
-      bad: `.bad { color: red }\n.bad3d { color: blue }\n`,
+      bad: `.bad { color: red }\n.bad.other { color: blue }\n`,
     });
     const sealing: DesignSystem = {
       ...base,
