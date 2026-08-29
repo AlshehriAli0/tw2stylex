@@ -21,6 +21,19 @@ StyleX value referencing a variable StyleX does not own. Runtime theming — ten
 Migrate tokens into StyleX only when you want StyleX to own them: type safety, autocomplete,
 dead-code elimination. It is not a prerequisite.
 
+## Tailwind's own variables leave with Tailwind
+
+Tailwind 4 utilities read the default theme through variables: `p-4` is
+`calc(var(--spacing) * 4)`, `text-sm` is `var(--text-sm)`. Those variables come from Tailwind's
+`theme.css`, so deleting `@import "tailwindcss"` deletes them too.
+
+`tw2sx` inlines every default Tailwind ships that the project has not overridden: `p-4` becomes
+`padding: '1rem'`, `text-red-500` becomes its `oklch(…)` literal. Whatever is still a `var(--…)`
+in the output is yours — a token from the project's `@theme`, an override of a Tailwind default,
+or a runtime variable behind an `@theme inline` alias. Before removing Tailwind, each of those
+must be defined somewhere else: keep the `:root` rule, or move it to `defineVars` with the `--`
+bridge below.
+
 ## `defineVars` vs `defineConsts`
 
 Ask one question per token group: *does anything override this at runtime?*

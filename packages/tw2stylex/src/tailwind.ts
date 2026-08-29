@@ -6,12 +6,30 @@ import { cjsDefault, isRecord, requireExport } from "./cjs.ts";
 import { findConfig } from "./find-files.ts";
 import { loadV3 } from "./tailwind-v3.ts";
 
+type Theme = {
+  get: (keys: string[]) => string | null;
+  hasDefault: (key: string) => boolean;
+};
+
 type Compiled = {
   candidatesToCss: (classes: string[]) => Array<string | null>;
   getClassOrder: (classes: string[]) => Array<[string, bigint | null]>;
+  theme: Theme;
 };
 
-export type DesignSystem = Compiled & { slotDefaults: Map<string, string> };
+export type DesignSystem = Omit<Compiled, "theme"> & {
+  slotDefaults: Map<string, string>;
+  themeDefault: (variable: string) => string | undefined;
+};
+
+const themeDefaultIn =
+  (theme: Theme) =>
+  (variable: string): string | undefined => {
+    if (!theme.hasDefault(variable)) return undefined;
+    const value = theme.get([variable]);
+    if (value === null || value.includes("theme(")) return undefined;
+    return value.replace(/\s+/g, " ");
+  };
 
 export type LoadedSystem = { ds: DesignSystem; entry: string; base: string; version: string };
 
@@ -214,5 +232,6 @@ const loadV4 = async (
   };
 
   const v4 = await load(fs.readFileSync(entry, "utf8"), { base, loadStylesheet, loadModule });
-  return { ds: { ...v4, slotDefaults: new Map() }, entry, base, version };
+  const ds = { ...v4, slotDefaults: new Map(), themeDefault: themeDefaultIn(v4.theme) };
+  return { ds, entry, base, version };
 };

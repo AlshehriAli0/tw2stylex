@@ -1,4 +1,5 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import fs from "node:fs";
 import path from "node:path";
 
 import { BANNED_SHORTHANDS, resolveClasses } from "../src/classes-to-css.ts";
@@ -39,7 +40,7 @@ describe("Tailwind's ! modifier is not silently dropped", () => {
   });
 
   test("the same class without the ! converts cleanly", () => {
-    expect(run("p-4").style?.padding).toBe("calc(var(--spacing) * 4)");
+    expect(run("p-4").style?.padding).toBe("1rem");
   });
 });
 
@@ -165,7 +166,7 @@ describe("declarations are keyed by condition, last class wins within one", () =
   test("two classes setting the same property under the same condition collapse to one", () => {
     const { declarations } = resolveClasses(sys.ds, ["p-2", "p-4"]);
     expect(declarations.size).toBe(1);
-    expect([...declarations.values()][0]?.props.get("padding")).toBe("calc(var(--spacing) * 4)");
+    expect([...declarations.values()][0]?.props.get("padding")).toBe("1rem");
   });
 
   test("the same property under two conditions stays as two groups", () => {
@@ -201,8 +202,8 @@ describe("a conditional shorthand that a longhand would beat", () => {
 
   test("a shorthand and longhand with no condition between them still converts", () => {
     expect(convert(sys.ds, "s", ["p-4", "pt-2"]).style).toEqual({
-      padding: "calc(var(--spacing) * 4)",
-      paddingTop: "calc(var(--spacing) * 2)",
+      padding: "1rem",
+      paddingTop: "0.5rem",
     });
   });
 
@@ -216,5 +217,69 @@ describe("a conditional shorthand that a longhand would beat", () => {
 
   test("an unrelated longhand does not trip it", () => {
     expect(convert(sys.ds, "s", ["p-4", "hover:p-8", "mt-2"]).skips).toEqual([]);
+  });
+});
+
+describe("Tailwind's own theme variables are inlined, so the output survives removing Tailwind", () => {
+  test("spacing, typography, container and transition defaults become literals", () => {
+    const style = run(
+      "p-4 text-sm max-w-sm font-bold tracking-wide leading-tight transition",
+    ).style;
+    expect(style).toMatchObject({
+      padding: "1rem",
+      fontSize: "0.875rem",
+      lineHeight: 1.25,
+      maxWidth: "24rem",
+      fontWeight: 700,
+      letterSpacing: "0.025em",
+      transitionDuration: "150ms",
+      transitionTimingFunction: "cubic-bezier(0.4, 0, 0.2, 1)",
+    });
+    expect(JSON.stringify(style)).not.toContain("var(--");
+  });
+
+  test.each([
+    ["-m-4", "margin", "-1rem"],
+    ["p-0.5", "padding", "0.125rem"],
+    ["text-red-500", "color", "oklch(63.7% 0.237 25.331)"],
+    ["text-sm", "lineHeight", "calc(1.25 / 0.875)"],
+  ])("%s gives %s: %s", (cls, property, value) => {
+    expect(run(cls).style?.[property]).toBe(value);
+  });
+
+  test("inlined values still verify against Tailwind declaration by declaration", () => {
+    const out = run("p-4 text-sm font-bold transition text-red-500");
+    expect(out.skips).toEqual([]);
+    expect(out.mismatches).toEqual([]);
+  });
+
+  test("a token the project defines in @theme stays a variable", () => {
+    expect(run("bg-brand rounded").style).toEqual({
+      backgroundColor: "var(--color-brand)",
+      borderRadius: "var(--radius)",
+    });
+  });
+
+  test("a runtime variable behind an @theme inline alias stays dynamic", () => {
+    expect(run("bg-primary").style?.backgroundColor).toBe("rgb(var(--primary))");
+  });
+
+  describe("a Tailwind default the project overrides is the project's token", () => {
+    const entry = path.join(import.meta.dir, "override-fixture.css");
+    let overridden: LoadedSystem;
+
+    beforeAll(async () => {
+      fs.writeFileSync(entry, `@import "tailwindcss";\n@theme {\n  --spacing: 0.3rem;\n}\n`);
+      overridden = await loadDesignSystem(entry);
+    });
+
+    afterAll(() => fs.rmSync(entry, { force: true }));
+
+    test("it stays a variable while untouched defaults still inline", () => {
+      expect(convert(overridden.ds, "t", ["p-4", "text-sm"]).style).toMatchObject({
+        padding: "calc(var(--spacing) * 4)",
+        fontSize: "0.875rem",
+      });
+    });
   });
 });
