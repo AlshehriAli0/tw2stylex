@@ -47,7 +47,7 @@ Each one says what stopped it, and how much work it will be:
 | `needs-lookup` | go find something first: a parent element, a child component |
 | `unknown` | investigate; often not a Tailwind class at all |
 
-There are 17 reasons. [reason-codes.md] walks through each one. [tokens.md] covers `@theme`
+There are 18 reasons. [reason-codes.md] walks through each one. [tokens.md] covers `@theme`
 tokens and dark mode.
 
 ## For agents

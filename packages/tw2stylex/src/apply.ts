@@ -40,7 +40,6 @@ const isPlainJsxAttribute = (usage: Usage): boolean =>
 
 const rewritableRange = (usage: Usage): [number, number] | undefined => {
   if (usage.skips.length > 0 || usage.classNames.length === 0) return undefined;
-  if (usage.onHostElement !== true) return undefined;
   if (!isPlainJsxAttribute(usage)) return undefined;
   return usage.attributeRange;
 };

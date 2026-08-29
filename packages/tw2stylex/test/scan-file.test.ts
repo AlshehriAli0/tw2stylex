@@ -26,8 +26,8 @@ describe("static class strings are read whole", () => {
     expect(usage?.skips).toEqual([]);
   });
 
-  test("an empty className is not a usage at all", () => {
-    expect(scan(`<div className="" />`)).toEqual([]);
+  test.each(["div", "Card"])("an empty className on %s is not a usage at all", tag => {
+    expect(scan(`<${tag} className="" />`)).toEqual([]);
   });
 
   test("an attribute that is not className is ignored", () => {
@@ -170,11 +170,11 @@ describe("an element with two styling sources cannot take a props spread", () =>
 
 describe("only host elements can receive a props spread", () => {
   test.each(["div", "span", "button", "my-element"])("%s is a host element", tag => {
-    expect(first(`<${tag} className="flex" />`)?.onHostElement).toBe(true);
+    expect(reasonsIn(`<${tag} className="flex" />`)).toEqual([]);
   });
 
   test.each(["Card", "MyCard", "Foo.Bar"])("%s is a component", tag => {
-    expect(first(`<${tag} className="flex" />`)?.onHostElement).toBe(false);
+    expect(reasonsIn(`<${tag} className="flex" />`)).toEqual(["component-class-name"]);
   });
 });
 

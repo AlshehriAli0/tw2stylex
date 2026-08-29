@@ -11,7 +11,6 @@ export type Usage = {
   classNames: string[];
   loc: Loc;
   attributeRange?: [number, number];
-  onHostElement?: boolean;
   kind: UsageKind;
   variantAxis?: string;
   variantValue?: string;
@@ -166,8 +165,8 @@ const classExpression = (attr: t.JSXAttribute): t.Node | undefined => {
   return undefined;
 };
 
-const styleAttrSkip = (element: t.JSXOpeningElement): Skip | undefined => {
-  const styleAttr = element.attributes.find(
+const styleAttrSkip = (element: t.JSXOpeningElement | undefined): Skip | undefined => {
+  const styleAttr = element?.attributes.find(
     (a): a is t.JSXAttribute =>
       t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === "style",
   );
@@ -182,6 +181,15 @@ const styleAttrSkip = (element: t.JSXOpeningElement): Skip | undefined => {
 const isHostElement = (element: t.JSXOpeningElement): boolean =>
   t.isJSXIdentifier(element.name) && /^[a-z]/.test(element.name.name);
 
+const componentSkip = (element: t.JSXOpeningElement | undefined): Skip | undefined =>
+  element && isHostElement(element)
+    ? undefined
+    : {
+        reason: "component-class-name",
+        detail: "This className is on a component, not a host element.",
+        hint: "Convert the component first, then pass a StyleX style prop instead of className.",
+      };
+
 const rangeOf = (node: t.Node): [number, number] | undefined =>
   node.start !== null && node.start !== undefined && node.end !== null && node.end !== undefined
     ? [node.start, node.end]
@@ -195,15 +203,17 @@ const jsxUsage = (
   if (!expr) return undefined;
 
   const { classes, skips } = readClasses(expr);
-  const conflict = element ? styleAttrSkip(element) : undefined;
-  if (conflict) skips.push(conflict);
+  const styleAttr = styleAttrSkip(element);
+  if (styleAttr) skips.push(styleAttr);
   if (classes.length === 0 && skips.length === 0) return undefined;
+
+  const onComponent = componentSkip(element);
+  if (onComponent) skips.push(onComponent);
 
   return {
     classNames: classes,
     loc: locOf(attr),
     attributeRange: rangeOf(attr),
-    onHostElement: element ? isHostElement(element) : false,
     kind: t.isCallExpression(expr) ? "cn-call" : "literal",
     skips,
   };
