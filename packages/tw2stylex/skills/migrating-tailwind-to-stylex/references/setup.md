@@ -55,7 +55,7 @@ Tailwind you have not deleted yet and migrated components keep their old styles.
 **`include` covering the files you are migrating**, for the Next.js/PostCSS path. A file outside
 the pattern compiles to nothing.
 
-## Prove it works before converting anything
+## Prove development works before converting anything
 
 Style one `<div>` by hand, load the page, read its computed styles:
 
@@ -67,6 +67,20 @@ const check = stylex.create({ it: { backgroundColor: 'red' } });
 
 Red means the plugin, the entrypoint and the import are all correct. Not red means the build
 is not wired, and every conversion after this point will look broken for that reason alone.
+
+## Prove production works too
+
+Run the project's real production client and SSR builds, if it has SSR, before removing the
+red check above. Verify all three:
+
+- An emitted CSS asset contains the check's red StyleX atom.
+- Executable production JavaScript contains neither `stylex.create` nor the development-only
+  `virtual:stylex` URLs.
+- For an SSR app, one production SSR render completes without a StyleX runtime error.
+
+A clean typecheck proves only that the StyleX API is installed. The CSS asset proves extraction;
+the JavaScript and SSR checks prove every production compiler path ran the transform. Use the
+project's own commands and output directories — `tw2sx` does not own either one.
 
 ## When styles do not appear
 
