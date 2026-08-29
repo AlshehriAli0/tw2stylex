@@ -80,7 +80,8 @@ style (`colorVariantsDisabled`) and select it, rather than layering a second sty
 the first. Layering is what wipes the conditions.
 
 `tw2sx` converts cva mechanically and names styles from the axis and value. Plain JSX usages
-get `el1`, `el2` placeholders — rename those to what the element is while you review the file.
+are named after the element's `id`, `aria-label` or tag — rename tag names to what the element
+is while you review the file.
 
 ### Branch on the variant, do not look it up
 

@@ -11,6 +11,7 @@ export type Usage = {
   classNames: string[];
   loc: Loc;
   attributeRange?: [number, number];
+  elementName?: string;
   kind: UsageKind;
   variantAxis?: string;
   variantValue?: string;
@@ -165,11 +166,31 @@ const classExpression = (attr: t.JSXAttribute): t.Node | undefined => {
   return undefined;
 };
 
-const styleAttrSkip = (element: t.JSXOpeningElement | undefined): Skip | undefined => {
-  const styleAttr = element?.attributes.find(
+const attributeNamed = (
+  element: t.JSXOpeningElement | undefined,
+  name: string,
+): t.JSXAttribute | undefined =>
+  element?.attributes.find(
     (a): a is t.JSXAttribute =>
-      t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === "style",
+      t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === name,
   );
+
+const stringAttribute = (
+  element: t.JSXOpeningElement | undefined,
+  name: string,
+): string | undefined => {
+  const value = attributeNamed(element, name)?.value;
+  return t.isStringLiteral(value) ? value.value : undefined;
+};
+
+const tagOf = (element: t.JSXOpeningElement | undefined): string | undefined =>
+  element && t.isJSXIdentifier(element.name) ? element.name.name : undefined;
+
+const elementName = (element: t.JSXOpeningElement | undefined): string | undefined =>
+  stringAttribute(element, "id") ?? stringAttribute(element, "aria-label") ?? tagOf(element);
+
+const styleAttrSkip = (element: t.JSXOpeningElement | undefined): Skip | undefined => {
+  const styleAttr = attributeNamed(element, "style");
   if (!styleAttr) return undefined;
   return {
     reason: "two-style-sources",
@@ -214,6 +235,7 @@ const jsxUsage = (
     classNames: classes,
     loc: locOf(attr),
     attributeRange: rangeOf(attr),
+    elementName: elementName(element),
     kind: t.isCallExpression(expr) ? "cn-call" : "literal",
     skips,
   };

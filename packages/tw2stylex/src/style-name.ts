@@ -3,14 +3,23 @@ import type { Usage } from "./scan-file.ts";
 const camelise = (s: string): string =>
   s.replace(/[^A-Za-z0-9]+(.)/g, (_m, c: string) => c.toUpperCase()).replace(/[^A-Za-z0-9]/g, "");
 
+const lowerFirst = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
+
+const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+
 const positionInFile = (index: number): string => `el${index + 1}`;
 
 const axisAndValue = (usage: Usage): string =>
   camelise(`${usage.variantAxis}-${usage.variantValue}`);
 
+const fromElement = (usage: Usage, index: number): string => {
+  const name = lowerFirst(camelise(usage.elementName ?? ""));
+  return IDENTIFIER.test(name) ? name : positionInFile(index);
+};
+
 const baseName = (usage: Usage, index: number): string => {
   if (usage.kind === "cva-base") return "base";
-  if (usage.kind !== "cva-variant") return positionInFile(index);
+  if (usage.kind !== "cva-variant") return fromElement(usage, index);
   return axisAndValue(usage) || positionInFile(index);
 };
 
