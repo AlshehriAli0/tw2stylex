@@ -26,14 +26,15 @@ Use the project's own package manager — `bun add`, `pnpm add`, `yarn add`.
 
 ```ts
 // vite.config.ts
-import stylex from '@stylexjs/unplugin';
+import stylex from '@stylexjs/unplugin/vite';
 
 export default defineConfig({
-  plugins: [stylex.vite({ useCSSLayers: false }), react()],
+  plugins: [stylex({ useCSSLayers: false }), react()],
 });
 ```
 
-`stylex.webpack()`, `stylex.rspack()`, `stylex.esbuild()` and `stylex.rollup()` take the same
+Import the adapter for your bundler — `@stylexjs/unplugin/vite`, `/webpack`, `/rspack`,
+`/esbuild`, `/rollup` — not the package root, which loads every adapter. All take the same
 options. **Next.js** needs `babel.config.js` plus `postcss.config.js` — copy them from the
 installation doc linked above rather than from memory.
 
@@ -43,13 +44,13 @@ the plugin too:
 
 ```ts
 // vitest.config.ts
-import stylex from '@stylexjs/unplugin';
+import stylex from '@stylexjs/unplugin/vite';
 
 export default defineConfig({
   test: {
     projects: [
       {
-        plugins: [stylex.vite({ useCSSLayers: false })],
+        plugins: [stylex({ useCSSLayers: false })],
         test: { name: 'dom', environment: 'jsdom' },
       },
     ],
