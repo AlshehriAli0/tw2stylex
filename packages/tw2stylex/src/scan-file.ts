@@ -64,6 +64,8 @@ const LOGICAL_HINT = "Apply the style conditionally: stylex.props(base, cond && 
 const OBJECT_HINT = "Each key becomes a style applied under the same condition.";
 const CALL_HINT =
   "Convert it by hand, or add it to the merge-function list if it behaves like clsx.";
+const EXPRESSION_HINT =
+  "Rewrite the runtime expression as conditional StyleX styles before removing className.";
 const PROP_HINT = `Give the component a "style?: StyleXStylesWithout<{...}>" prop and pass it last to stylex.props(); see the skill's references/component-api.md.`;
 
 const readTemplate = (n: t.TemplateLiteral, skips: Skip[]): string[] => {
@@ -112,7 +114,12 @@ export const readClasses = (node: t.Node): Reader => {
     return undefined;
   };
 
-  const walk = (n: t.Node): string[] => written(n) ?? decidedAtRuntime(n) ?? [];
+  const walk = (n: t.Node): string[] => {
+    const classes = written(n) ?? decidedAtRuntime(n);
+    if (classes) return classes;
+    skips.push(dynamic(n, `${n.type} in a class expression`, EXPRESSION_HINT));
+    return [];
+  };
 
   const walkCall = (n: t.CallExpression): string[] => {
     const name = calleeName(n.callee);
