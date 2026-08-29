@@ -19,7 +19,7 @@ import { EXIT, fail, type Failure } from "./fail.ts";
 import { collectFiles, findConfig, findEntryCss } from "./find-files.ts";
 import { AGENT_HOMES, homesPresent, installSkill } from "./init.ts";
 import { plan } from "./plan.ts";
-import { paintSkip, renderReport, toSkipLine, type Report, type SkipLine } from "./report.ts";
+import { paintSkip, renderReport, toSkipLine, took, type Report, type SkipLine } from "./report.ts";
 import { loadDesignSystem } from "./tailwind.ts";
 
 export type CommandResult = { exit: number } | Failure;
@@ -187,8 +187,10 @@ export const planCommand = async (args: Args, out: Output): Promise<CommandResul
   const css = entryFor(args, containingDir(target), `tw2sx plan ${target}`);
   if (typeof css !== "string") return css;
 
+  const startedAt = Date.now();
   const files = collectFiles(target);
   const report = await plan(css, files);
+  const elapsedMs = Date.now() - startedAt;
 
   const hash = crypto.createHash("sha1").update(files.join("\n")).digest("hex").slice(0, 6);
   const reportPath = flagString(args, "out") ?? path.join(".tw2sx", `plan-${hash}.json`);
@@ -196,7 +198,7 @@ export const planCommand = async (args: Args, out: Output): Promise<CommandResul
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
 
   if (out.json) emit(summarise(report, out.fields));
-  else console.log(renderReport(report, out.limit, reportPath));
+  else console.log(renderReport(report, out.limit, reportPath, elapsedMs));
 
   return { exit: planExit(report) };
 };
@@ -237,13 +239,15 @@ type ApplyPrint = {
   skipped: number;
   target: string;
   limit: number;
+  elapsedMs: number;
 };
 
-const printApply = ({ touched, write, rewritten, skipped, target, limit }: ApplyPrint): void => {
+const printApply = (p: ApplyPrint): void => {
+  const { touched, write, rewritten, skipped, target, limit, elapsedMs } = p;
   const mode = write ? "" : dim("  (DRY RUN - pass --write to edit)");
   console.log(
     `${bold(String(touched.length))} files · ${green(bold(String(rewritten)))} usages rewritten · ` +
-      `${bold(String(skipped))} left for you${mode}`,
+      `${bold(String(skipped))} left for you${dim(` · ${took(elapsedMs)}`)}${mode}`,
   );
   for (const r of touched.slice(0, limit))
     console.log(`  ${dim(r.file)}: ${r.rewritten} rewritten, ${r.skipped} skipped`);
@@ -264,6 +268,7 @@ export const applyCommand = async (args: Args, out: Output): Promise<CommandResu
   const css = entryFor(args, containingDir(target), `tw2sx apply ${target}`);
   if (typeof css !== "string") return css;
 
+  const startedAt = Date.now();
   const sys = await loadDesignSystem(css);
   const scanned = collectFiles(target).map(readAndScan);
   warmUp(
@@ -276,7 +281,16 @@ export const applyCommand = async (args: Args, out: Output): Promise<CommandResu
   const skipped = sumOf(results, "skipped");
 
   if (out.json) emit(applyJson(touched, write, rewritten, skipped));
-  else printApply({ touched, write, rewritten, skipped, target, limit: out.limit });
+  else
+    printApply({
+      touched,
+      write,
+      rewritten,
+      skipped,
+      target,
+      limit: out.limit,
+      elapsedMs: Date.now() - startedAt,
+    });
 
   return { exit: skipped > 0 ? EXIT.SOME_SKIPPED : EXIT.NOTHING_SKIPPED };
 };

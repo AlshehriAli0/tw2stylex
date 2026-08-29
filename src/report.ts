@@ -121,12 +121,21 @@ const nextStep = (skips: SkipLine[], reportPath: string | undefined): string[] =
 const countOf = (skipped: number): string =>
   skipped === 0 ? green(bold("0")) : FIX_COLOR["check-first"](bold(String(skipped)));
 
-export const renderReport = (report: Report, limit: number, reportPath?: string): string => {
+export const took = (ms: number): string =>
+  ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
+
+export const renderReport = (
+  report: Report,
+  limit: number,
+  reportPath?: string,
+  elapsedMs?: number,
+): string => {
   const { files, usages, converted, skipped } = report.summary;
   const skips = report.files.flatMap(f => f.skips);
+  const elapsed = elapsedMs === undefined ? "" : dim(` · ${took(elapsedMs)}`);
   return [
     `${bold(String(files))} files · ${bold(String(usages))} usages · ` +
-      `${green(bold(String(converted)))} converted · ${countOf(skipped)} skipped`,
+      `${green(bold(String(converted)))} converted · ${countOf(skipped)} skipped${elapsed}`,
     ...mismatchSection(report, limit),
     ...skipSection(skips, limit),
     ...nextStep(skips, reportPath),
