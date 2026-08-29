@@ -28,7 +28,7 @@ tw2sx apply src/components --write  # rewrites only what converts cleanly
 Repeat until the skip count stops dropping. `plan` and `apply` agree on what converts, so the
 report never promises something `apply` will skip.
 
-| | |
+| command | what it does |
 |---|---|
 | `tw2sx init` | Set the repo up for your agent. Safe to re-run. |
 | `tw2sx explain "<classes>"` | Resolve a class string to a StyleX object. Touches nothing. |
