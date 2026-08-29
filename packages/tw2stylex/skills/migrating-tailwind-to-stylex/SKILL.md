@@ -136,12 +136,26 @@ dropped. Move the value into a `.stylex.ts` `defineVars`/`defineConsts`, or inli
 **Keyframes are file-local.** Define them with `stylex.keyframes()`. Share one across files by
 wrapping its name in a `defineVars` token.
 
-Descendant and child selectors are the one loud failure: `{'> *': …}` throws
-`Invalid pseudo or at-rule.` at build time.
+A bare descendant or child selector is the one loud failure: `{'> *': …}` throws
+`Invalid pseudo or at-rule.` at build time. The constraint behind it is narrower than "no
+selectors":
 
-When a rule genuinely needs the cascade — a global selector, restyling a third-party component,
-an `@font-face` — put it in a **CSS Module beside the component**. Scoped, explicit, greppable
-later. That is the sanctioned escape hatch; record each use in your summary.
+> An element may **read** its surroundings to style itself. It may not style anything else.
+
+Reading is wide open. Any condition key starting `:` or `@` is accepted, so `:where()` and
+`:has()` can reach ancestors and siblings:
+
+```js
+opacity: { default: 1, ':where([data-disabled] *)': 0.5 }   // some ancestor is disabled
+```
+
+Expect a lint warning there; the CSS is correct. `stylex.when.*` is the tidier form of the same
+idea — see `sibling-state` in [reason-codes.md](references/reason-codes.md).
+
+Styling a *different* element is what has no StyleX form. Style that element directly instead.
+When it is genuinely out of reach — a global selector, third-party DOM you do not render, an
+`@font-face` — put the rule in a **CSS Module beside the component**. Scoped, explicit,
+greppable later. Record each use in your summary.
 
 ## What good output looks like
 
@@ -154,8 +168,9 @@ file rather than in a pass of their own:
 - **One entry per distinct style.** Elements with the same declarations share one `styles.x`.
   Before adding a style by hand, look for the entry that already says it and point the element
   at that.
-- **Keep styles beside their markup.** Co-location is the point of StyleX; resist collecting a
-  file's styles into a shared module.
+- **Keep styles beside their markup.** An exported `stylex.create` cannot be dead-code
+  eliminated, so every unused style in a shared styles module ships as CSS forever. That is
+  nearly always why a migration ends with *more* CSS than the Tailwind it replaced.
 - **Reach for a token before a literal.** A repeated `16` that the project already spells
   `spacing.medium` should say so — see [tokens.md](references/tokens.md).
 
