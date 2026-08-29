@@ -7,3 +7,6 @@ codedb.snapshot
 CONTEXT.md
 docs/
 *.tgz
+
+# scraped research corpus, not part of the package
+research/

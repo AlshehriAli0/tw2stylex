@@ -62,7 +62,7 @@ export const applyScanned = (
   { file, code, scan }: Scanned,
   write: boolean,
 ): ApplyFileResult => {
-  const { usages, hasStyleX, styleXNamespace } = scan;
+  const { usages, hasStyleX, styleXNamespace, importInsertAt } = scan;
 
   if (hasStyleX && styleXNamespace === undefined)
     return { file, written: false, rewritten: 0, skipped: usages.length, reason: "already-stylex" };
@@ -93,7 +93,7 @@ export const applyScanned = (
   if (!rewritten)
     return { file, written: false, rewritten: 0, skipped, reason: "nothing-convertible" };
 
-  if (!hasStyleX) edits.prepend(`import * as stylex from '@stylexjs/stylex';\n`);
+  if (!hasStyleX) edits.appendLeft(importInsertAt, `import * as stylex from '@stylexjs/stylex';\n`);
   edits.append(`\n\n${printCreate(sheet.styles, objectName, stylex)}\n`);
   const next = edits.toString();
 

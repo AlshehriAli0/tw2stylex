@@ -188,7 +188,8 @@ export const loadDesignSystem = async (entryPath: string): Promise<LoadedSystem>
 
   if (majorOf(version) === 3) {
     const config = configFor(entry);
-    return { ds: loadV3(resolver.require, config), entry: config, base, version };
+    const css = entry.endsWith(".css") ? entry : undefined;
+    return { ds: loadV3(resolver.require, config, css), entry: config, base, version };
   }
   return await loadV4(resolver, entry, version);
 };

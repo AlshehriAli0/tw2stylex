@@ -62,6 +62,48 @@ const styleOf = (classes: string[], of: LoadedSystem = sys): Record<string, unkn
 const reasonsFor = (classes: string[], of: LoadedSystem = sys): string[] =>
   convert(of.ds, "s", classes).skips.map(s => s.reason);
 
+describe("classes the project's own CSS defines or overrides", () => {
+  let overriding: LoadedSystem;
+
+  beforeAll(async () => {
+    const project = projectWithTailwind3Installed({
+      "tailwind.config.js": CONFIG,
+      "app/globals.css": [
+        "@tailwind base;",
+        "@tailwind utilities;",
+        "@layer utilities {",
+        "  .font-medium, .font-semibold, .font-bold { font-weight: unset; }",
+        '  .font-semibold { font-variation-settings: "wght" 600; }',
+        "}",
+        "@layer components { .btn { @apply p-4 font-semibold; } }",
+        "",
+      ].join("\n"),
+    });
+    overriding = await loadDesignSystem(path.join(project, "app/globals.css"));
+  });
+
+  // The browser applies the project's @layer rule after Tailwind's own, so `unset` is what
+  // renders. Answering `600` here is the one way MISMATCHES: 0 has been wrong in the field.
+  test("an @layer override of a core class wins, as it does in the browser", () => {
+    expect(styleOf(["font-semibold"], overriding)).toEqual({
+      fontWeight: "unset",
+      fontVariationSettings: '"wght" 600',
+    });
+  });
+
+  test("a class written with @apply resolves to what it applies", () => {
+    expect(styleOf(["btn"], overriding)).toEqual({
+      padding: "1rem",
+      fontWeight: "unset",
+      fontVariationSettings: '"wght" 600',
+    });
+  });
+
+  test("without the entry CSS the core value stands", () => {
+    expect(styleOf(["font-semibold"])).toEqual({ fontWeight: 600 });
+  });
+});
+
 describe("a Tailwind 3 project", () => {
   test("reports the version it actually loaded", () => {
     expect(sys.version).toStartWith("3.");

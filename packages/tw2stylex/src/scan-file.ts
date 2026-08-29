@@ -18,7 +18,12 @@ export type Usage = {
   skips: Skip[];
 };
 
-export type ScanResult = { usages: Usage[]; hasStyleX: boolean; styleXNamespace?: string };
+export type ScanResult = {
+  usages: Usage[];
+  hasStyleX: boolean;
+  styleXNamespace?: string;
+  importInsertAt: number;
+};
 
 const MERGE_FNS = new Set(["cn", "clsx", "classnames", "twMerge", "twJoin", "cx"]);
 
@@ -189,7 +194,19 @@ const tagOf = (element: t.JSXOpeningElement | undefined): string | undefined =>
 const elementName = (element: t.JSXOpeningElement | undefined): string | undefined =>
   stringAttribute(element, "id") ?? stringAttribute(element, "aria-label") ?? tagOf(element);
 
-const styleAttrSkip = (element: t.JSXOpeningElement | undefined): Skip | undefined => {
+const spreadsStylexProps = (attr: t.JSXAttribute | t.JSXSpreadAttribute): boolean =>
+  t.isJSXSpreadAttribute(attr) &&
+  t.isCallExpression(attr.argument) &&
+  calleeName(attr.argument.callee) === "props";
+
+const secondStyleSource = (element: t.JSXOpeningElement | undefined): Skip | undefined => {
+  const stylexSpread = element?.attributes.find(spreadsStylexProps);
+  if (stylexSpread)
+    return {
+      reason: "two-style-sources",
+      detail: `This element already spreads stylex.props() (line ${locOf(stylexSpread).line}); a className beside it is overwritten or overwrites it.`,
+      hint: "Add these styles to that stylex.props() call instead: stylex.props(styles.a, styles.b).",
+    };
   const styleAttr = attributeNamed(element, "style");
   if (!styleAttr) return undefined;
   return {
@@ -224,8 +241,8 @@ const jsxUsage = (
   if (!expr) return undefined;
 
   const { classes, skips } = readClasses(expr);
-  const styleAttr = styleAttrSkip(element);
-  if (styleAttr) skips.push(styleAttr);
+  const second = secondStyleSource(element);
+  if (second) skips.push(second);
   if (classes.length === 0 && skips.length === 0) return undefined;
 
   const onComponent = componentSkip(element);
@@ -282,10 +299,17 @@ const cvaUsages = (call: t.CallExpression): Usage[] => {
   return usages;
 };
 
+const lineAfterDirectives = (ast: t.File, code: string): number => {
+  const directivesEnd = ast.program.directives.at(-1)?.end;
+  if (typeof directivesEnd !== "number") return 0;
+  const lineBreak = code.indexOf("\n", directivesEnd);
+  return lineBreak === -1 ? code.length : lineBreak + 1;
+};
+
 const COULD_HOLD_A_USAGE = /className|class\s*=|\bcva\s*\(|@stylexjs\//;
 
 export const scanFile = (code: string, filename: string): ScanResult => {
-  if (!COULD_HOLD_A_USAGE.test(code)) return { usages: [], hasStyleX: false };
+  if (!COULD_HOLD_A_USAGE.test(code)) return { usages: [], hasStyleX: false, importInsertAt: 0 };
 
   const ast = parse(code, {
     sourceFilename: filename,
@@ -328,5 +352,5 @@ export const scanFile = (code: string, filename: string): ScanResult => {
     else if (t.isImportDeclaration(node)) readImport(node);
   });
 
-  return { usages, hasStyleX, styleXNamespace };
+  return { usages, hasStyleX, styleXNamespace, importInsertAt: lineAfterDirectives(ast, code) };
 };

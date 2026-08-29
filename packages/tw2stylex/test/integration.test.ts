@@ -121,6 +121,18 @@ describe("selfSelector distinguishes self from relational", () => {
       expect(selfSelector(sel, "foo")).toBeNull();
     },
   );
+  // A project's `@layer` rule often lists several classes at once. The parts about other
+  // classes say nothing about this element; a part that reaches this class from elsewhere does.
+  test("other classes in the same selector list are ignored", () => {
+    expect(selfSelector(".bar, .foo, .baz:hover", "foo")).toBe("");
+    expect(selfSelector(".bar, .foo:hover", "foo")).toBe(":hover");
+  });
+  test.each([".foo, .group:hover .foo", ".foo-wide", ".foo, .foo:hover"])(
+    "%s is not a plain self selector",
+    sel => {
+      expect(selfSelector(sel, "foo")).toBeNull();
+    },
+  );
   test("escaped commas inside a value do not split the selector list", () => {
     expect(
       selfSelector(".ease-\\[cubic-bezier\\(0\\.22\\,1\\)\\]", "ease-[cubic-bezier(0.22,1)]"),

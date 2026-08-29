@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { EXIT } from "../src/fail.ts";
@@ -89,6 +91,56 @@ describe("exit codes are what a script should branch on", () => {
     expect(r.err).toContain("tw2sx: Report not found");
     expect(r.err).toContain("hint: Run tw2sx plan");
     expect(r.err).toContain("code: E_NO_REPORT");
+  });
+});
+
+// The agent reads stdout every run, so stdout is where the pointer to the skill has to live.
+describe("plan points at the skill", () => {
+  const planIn = (dir: string): string => {
+    fs.writeFileSync(path.join(dir, "a.tsx"), `export const A = () => <div className="flex" />;\n`);
+    const r = spawnSync("bun", [cli, "plan", ".", "--limit", "0", "--css", css], {
+      cwd: dir,
+      encoding: "utf8",
+    });
+    return r.stdout;
+  };
+
+  test("at init when the skill is not installed yet", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tw2sx-noskill-"));
+    try {
+      expect(planIn(dir)).toContain("Skill: run tw2sx init");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("at the installed SKILL.md once it is", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tw2sx-skill-"));
+    try {
+      fs.mkdirSync(path.join(dir, ".agents"));
+      spawnSync("bun", [cli, "init"], { cwd: dir });
+      expect(planIn(dir)).toContain(
+        "read .agents/skills/migrating-tailwind-to-stylex/SKILL.md in full",
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("explain answers a batch from stdin in one run", () => {
+  test("one JSON object per input line, blank lines skipped", () => {
+    const r = spawnSync("bun", [cli, "explain", "--stdin", "--json", "--css", css], {
+      cwd: repo,
+      encoding: "utf8",
+      input: "flex p-4\n\ndark:text-white\n",
+    });
+    const body: unknown = JSON.parse(r.stdout);
+    expect(body).toMatchObject([
+      { input: "flex p-4", ok: true },
+      { input: "dark:text-white", ok: false },
+    ]);
+    expect(r.status).toBe(EXIT.SOME_SKIPPED);
   });
 });
 

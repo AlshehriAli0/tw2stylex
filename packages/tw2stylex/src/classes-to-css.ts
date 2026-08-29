@@ -95,19 +95,26 @@ const withoutAttributeValues = (selector: string): string =>
 const reachesAnotherElement = (suffix: string): boolean =>
   /[\s>+~]/.test(withoutAttributeValues(suffix));
 
-const afterClass = (part: string, dottedClass: string): string | null => {
-  const selector = unescape(part);
+const CONTINUES_A_CLASS_NAME = /^[\w-]/;
+
+const afterClass = (selector: string, dottedClass: string): string | null => {
   if (selector.startsWith("&")) return selector.slice(1);
-  if (selector.startsWith(dottedClass)) return selector.slice(dottedClass.length);
-  return null;
+  if (!selector.startsWith(dottedClass)) return null;
+  const suffix = selector.slice(dottedClass.length);
+  return CONTINUES_A_CLASS_NAME.test(suffix) ? null : suffix;
 };
+
+const aboutAnotherClass = (selector: string, dottedClass: string): boolean =>
+  !selector.startsWith("&") && !selector.includes(dottedClass);
 
 export const selfSelector = (selector: string, className: string): string | null => {
   const dottedClass = `.${className}`;
   const suffixes = new Set<string>();
 
   for (const part of splitOnTopLevelCommas(selector)) {
-    const suffix = afterClass(part.trim(), dottedClass);
+    const one = unescape(part.trim());
+    if (aboutAnotherClass(one, dottedClass)) continue;
+    const suffix = afterClass(one, dottedClass);
     if (suffix === null || reachesAnotherElement(suffix)) return null;
     suffixes.add(suffix);
   }

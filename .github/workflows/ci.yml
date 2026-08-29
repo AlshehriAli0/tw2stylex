@@ -61,7 +61,7 @@ jobs:
           cd "$RUNNER_TEMP/consumer"
           test -f node_modules/tw2stylex/README.md
           test -f node_modules/tw2stylex/LICENSE
-          npx tw2sx init
+          npx tw2stylex init
           test -f .claude/skills/migrating-tailwind-to-stylex/SKILL.md
 
       - name: the CLI converts and verifies

@@ -3,7 +3,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { AGENT_HOMES, homesPresent, installSkill, skillName, version } from "../src/init.ts";
+import {
+  AGENT_HOMES,
+  homesPresent,
+  ignoreReports,
+  installSkill,
+  skillName,
+  version,
+} from "../src/init.ts";
 
 let project = "";
 
@@ -103,6 +110,27 @@ describe("what it writes", () => {
     fs.writeFileSync(settings, "{}");
     install();
     expect(fs.existsSync(settings)).toBe(true);
+  });
+});
+
+describe("the report directory is ignored", () => {
+  const ignore = (): string => fs.readFileSync(path.join(project, ".gitignore"), "utf8");
+
+  test("a .gitignore is created when there is none", () => {
+    ignoreReports(project);
+    expect(ignore()).toBe(".tw2sx/\n");
+  });
+
+  test("an existing .gitignore gains one line, on its own line", () => {
+    fs.writeFileSync(path.join(project, ".gitignore"), "node_modules");
+    ignoreReports(project);
+    expect(ignore()).toBe("node_modules\n.tw2sx/\n");
+  });
+
+  test("already ignored means untouched", () => {
+    fs.writeFileSync(path.join(project, ".gitignore"), ".tw2sx\n");
+    ignoreReports(project);
+    expect(ignore()).toBe(".tw2sx\n");
   });
 });
 

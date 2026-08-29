@@ -198,7 +198,7 @@ describe("the limit bounds the output without hiding the total", () => {
   test("only `limit` lines print, and the total is still stated", () => {
     const out = renderReport(many, 5);
     expect(out.split("\n").filter(l => l.includes("skipped marker-class"))).toHaveLength(5);
-    expect(out).toContain("Showing 5 of 50 skipped.");
+    expect(out).toContain("Showing 5 of 50 skipped classes.");
   });
 
   test("limit 0 leaves the summary and the counts", () => {

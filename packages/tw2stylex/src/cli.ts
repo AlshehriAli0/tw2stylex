@@ -25,7 +25,7 @@ Converts a usage only when it can prove the CSS comes out the same as Tailwind p
 Everything else it SKIPS and lists, with a reason and how to fix it.
 
 COMMANDS  (nothing writes unless you say --write)
-  tw2sx init                   Set this repo up for your agent. Writes to the agent dirs it has.
+  tw2sx init                   Set this repo up for your agent. Writes to its agent dirs, or both if none.
   tw2sx explain "<classes>"    Show the StyleX for a class string, and whether it checks out.
   tw2sx plan <path>            Convert + check a folder. Writes a JSON report.
   tw2sx skipped <report.json>  Re-read a report, filtered.
@@ -45,6 +45,7 @@ OPTIONS
   --fix <f>           Show one fix type only.
   --out <file>        Where to write the report (default .tw2sx/plan-<hash>.json).
   --all               init only: write to every agent dir, not just the ones present.
+  --stdin             explain only: one class string per line, answered in one run.
   --write             apply only: actually edit files. Without it, apply is a dry run.
   --allow-dirty       apply only: write even with uncommitted changes.
 

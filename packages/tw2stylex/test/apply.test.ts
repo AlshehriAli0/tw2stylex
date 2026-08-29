@@ -112,6 +112,27 @@ export const Card = () => (
   });
 });
 
+describe("the import lands below the directive prologue", () => {
+  // A directive is only a directive as the first statement. An import above "use client"
+  // silently turns a client component into a server component.
+  test('"use client" stays the first statement', () => {
+    const file = write(
+      "client.tsx",
+      `"use client";\n\nexport const A = () => <div className="flex" />;\n`,
+    );
+    applyFile(sys, file, true);
+    expect(fs.readFileSync(file, "utf8")).toStartWith(
+      `"use client";\nimport * as stylex from '@stylexjs/stylex';\n`,
+    );
+  });
+
+  test("without a directive the import is the first line", () => {
+    const file = write("plain-top.tsx", `export const A = () => <div className="flex" />;\n`);
+    applyFile(sys, file, true);
+    expect(fs.readFileSync(file, "utf8")).toStartWith("import * as stylex");
+  });
+});
+
 describe("repeated runs", () => {
   test("an already-migrated file is recognised and left alone", () => {
     const file = write("twice.tsx", `export const A = () => <div className="flex p-4" />;\n`);
@@ -205,6 +226,10 @@ describe("apply refuses everything it cannot rewrite safely", () => {
       `export const A = ({ tone }) => <div className={cn("flex p-4", TONE_BOX[tone])} />;`,
     ],
     ["no classes at all", `export const A = () => <div id="x" />;`],
+    [
+      "a className beside a stylex.props() spread",
+      `import * as stylex from '@stylexjs/stylex';\nconst s = stylex.create({ a: { display: 'flex' } });\nexport const A = () => <div {...stylex.props(s.a)} className="p-4" />;`,
+    ],
   ])("%s is left in place", (_name, code) => {
     const file = write(`refuse-${_name.replace(/\W+/g, "-")}.tsx`, `${code}\n`);
     const before = fs.readFileSync(file, "utf8");
