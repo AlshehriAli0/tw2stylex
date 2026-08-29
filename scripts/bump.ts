@@ -1,5 +1,5 @@
 /**
- * Bumps packages/tw2sx to the next patch, minor or major and prints the new version.
+ * Bumps packages/tw2stylex to the next patch, minor or major and prints the new version.
  * The release workflow reads that number back to tag and name the release.
  */
 import { readFileSync, writeFileSync } from "node:fs";
@@ -20,7 +20,7 @@ const next = (version: string, kind: Kind): string => {
 const kind = process.argv[2] ?? "patch";
 if (!isKind(kind)) throw new Error(`bump takes ${KINDS.join(", ")}, got "${kind}"`);
 
-const file = path.resolve(import.meta.dirname, "../packages/tw2sx/package.json");
+const file = path.resolve(import.meta.dirname, "../packages/tw2stylex/package.json");
 const source = readFileSync(file, "utf8");
 const current = /"version": "([^"]+)"/.exec(source)?.[1];
 if (current === undefined) throw new Error(`no version field in ${file}`);

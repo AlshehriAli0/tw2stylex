@@ -7,14 +7,14 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AlshehriAli0/tailwind-2-stylex.git"
+    "url": "git+https://github.com/AlshehriAli0/tw2stylex.git"
   },
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "build": "bun run --cwd packages/tw2sx build",
-    "dev": "bun run --cwd packages/tw2sx dev",
+    "build": "bun run --cwd packages/tw2stylex build",
+    "dev": "bun run --cwd packages/tw2stylex dev",
     "test": "bun test packages/",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
@@ -22,7 +22,7 @@
     "format:check": "oxfmt --check .",
     "types:check": "tsc -p tsconfig.check.json",
     "check": "bun run format:check && bun run lint && bun run types:check && bun run test",
-    "pack:tw2sx": "bun run scripts/pack.ts",
+    "pack": "bun run scripts/pack.ts",
     "demo": "bun run scripts/demo-svg.ts"
   },
   "devDependencies": {

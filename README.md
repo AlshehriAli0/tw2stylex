@@ -12,8 +12,8 @@ compiler, which is what `MISMATCHES: 0` means, and reports the rest as typed ski
 ## Install
 
 ```bash
-npm i -D tw2sx     # bun add -d tw2sx · pnpm add -D tw2sx
-npx tw2sx init     # sets the repo up for your agent
+npm i -D tw2stylex     # bun add -d tw2stylex · pnpm add -D tw2stylex
+npx tw2sx init         # sets the repo up for your agent
 ```
 
 ## The loop

@@ -54,14 +54,14 @@ jobs:
       - name: check
         run: |
           bun run check
-          bun run pack:tw2sx
+          bun run pack
           mkdir -p "$RUNNER_TEMP/tarball"
-          tar -xzf tw2sx-*.tgz -C "$RUNNER_TEMP/tarball"
+          tar -xzf tw2stylex-*.tgz -C "$RUNNER_TEMP/tarball"
           test -f "$RUNNER_TEMP/tarball/package/README.md"
           test -f "$RUNNER_TEMP/tarball/package/LICENSE"
           test -f "$RUNNER_TEMP/tarball/package/dist/cli.js"
           test -f "$RUNNER_TEMP/tarball/package/skills/migrating-tailwind-to-stylex/SKILL.md"
-          rm -f tw2sx-*.tgz
+          rm -f tw2stylex-*.tgz
 
       - name: bump
         id: bump
@@ -90,8 +90,8 @@ jobs:
       # because of it.
       - name: publish
         run: |
-          bun run pack:tw2sx
-          npm publish tw2sx-*.tgz --access public
+          bun run pack
+          npm publish tw2stylex-*.tgz --access public
 
       # The tarball is attached, so the release page carries the exact bytes npm served.
       - name: github release
@@ -101,4 +101,4 @@ jobs:
         run: |
           gh release create "v${VERSION}" --generate-notes --title "v${VERSION}" \
             "tw2sx-${VERSION}.tgz#tw2sx-${VERSION}.tgz"
-          rm -f tw2sx-*.tgz
+          rm -f tw2stylex-*.tgz

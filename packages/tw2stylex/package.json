@@ -1,5 +1,5 @@
 {
-  "name": "tw2sx",
+  "name": "tw2stylex",
   "version": "0.1.0",
   "description": "Agent-driven Tailwind to StyleX migration codemod. Converts what it can prove, reports what it can't.",
   "keywords": [
@@ -13,14 +13,14 @@
     "coding-agent",
     "claude-code"
   ],
-  "homepage": "https://github.com/AlshehriAli0/tailwind-2-stylex#readme",
+  "homepage": "https://github.com/AlshehriAli0/tw2stylex#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AlshehriAli0/tailwind-2-stylex.git",
-    "directory": "packages/tw2sx"
+    "url": "git+https://github.com/AlshehriAli0/tw2stylex.git",
+    "directory": "packages/tw2stylex"
   },
   "bugs": {
-    "url": "https://github.com/AlshehriAli0/tailwind-2-stylex/issues"
+    "url": "https://github.com/AlshehriAli0/tw2stylex/issues"
   },
   "license": "MIT",
   "type": "module",

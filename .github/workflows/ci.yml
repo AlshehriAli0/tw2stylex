@@ -48,13 +48,13 @@ jobs:
       # and only exist in the tarball. So this installs one into a bare project and drives it.
       - name: pack and install
         run: |
-          bun run pack:tw2sx
+          bun run pack
           mkdir -p "$RUNNER_TEMP/consumer/app" "$RUNNER_TEMP/consumer/.claude"
           cd "$RUNNER_TEMP/consumer"
           echo '{"name":"c","version":"1.0.0","private":true}' > package.json
           echo 'module.exports={content:[],theme:{extend:{colors:{brand:"#0af"}}}};' > tailwind.config.js
           echo 'export const A = () => <div className="flex p-4 text-brand rotate-45" />;' > app/a.tsx
-          npm i --silent "$GITHUB_WORKSPACE"/tw2sx-*.tgz tailwindcss@^3
+          npm i --silent "$GITHUB_WORKSPACE"/tw2stylex-*.tgz tailwindcss@^3
 
       - name: the skill ships and installs
         run: |
