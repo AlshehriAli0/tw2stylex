@@ -25,7 +25,8 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "tw2sx": "./dist/cli.js"
+    "tw2sx": "./dist/cli.js",
+    "tw2stylex": "./dist/cli.js"
   },
   "files": [
     "dist",

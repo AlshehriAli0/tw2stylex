@@ -13,7 +13,7 @@ compiler, which is what `MISMATCHES: 0` means, and reports the rest as typed ski
 
 ```bash
 npm i -D tw2stylex     # bun add -d tw2stylex · pnpm add -D tw2stylex
-npx tw2sx init         # sets the repo up for your agent
+npx tw2stylex init     # sets the repo up for your agent
 ```
 
 ## The loop
