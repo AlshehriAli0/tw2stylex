@@ -178,6 +178,25 @@ describe("only host elements can receive a props spread", () => {
   });
 });
 
+describe("the element's own name is kept for naming the style", () => {
+  test.each([
+    [`<section id="billing" aria-label="Bills" className="flex" />`, "billing"],
+    [`<button aria-label="Save billing" className="flex" />`, "Save billing"],
+    [`<h2 className="flex" />`, "h2"],
+    [`<Card className="flex" />`, "Card"],
+  ])("%s is named %p", (code, expected) => {
+    expect(first(code)?.elementName).toBe(expected);
+  });
+
+  test("an id that is not a string literal falls through to the tag", () => {
+    expect(first(`<div id={id} className="flex" />`)?.elementName).toBe("div");
+  });
+
+  test("a member-expression tag has no name", () => {
+    expect(first(`<Foo.Bar className="flex" />`)?.elementName).toBeUndefined();
+  });
+});
+
 describe("the byte range covers the whole attribute", () => {
   test("replacing that range swaps className for a spread and nothing else", () => {
     const code = `<div className="flex" id="x" />`;
@@ -287,8 +306,8 @@ describe("parsing is tolerant enough to keep going", () => {
 });
 
 /**
- * Usages are numbered el1, el2, ... in the order they are found, so the walk order is part of the
- * generated output. An element nested inside another element's attribute value must still come
+ * Usages are named in the order they are found (a second div becomes div2), so the walk order is
+ * part of the generated output. An element nested inside another element's attribute value must still come
  * after the attributes written before it, which is the one case where reading attributes off
  * their element instead of visiting them in place gives a different answer.
  */

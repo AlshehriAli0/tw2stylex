@@ -146,8 +146,9 @@ later. That is the sanctioned escape hatch; record each use in your summary.
 The tool is correct, not tasteful. Three things it leaves for you, worth doing as you review
 each file rather than in a pass of their own:
 
-- **Rename the placeholders.** `el1`, `el2` are positions, not names. Call them what the element
-  is — `card`, `label`, `icon`.
+- **Rename the guessed names.** A style is named after its element's `id`, then `aria-label`,
+  then tag: `billing`, `saveBilling`, `div2`. A tag names the tag, not the part — call it what
+  the element is: `card`, `label`, `icon`.
 - **Keep styles beside their markup.** Co-location is the point of StyleX; resist collecting a
   file's styles into a shared module.
 - **Reach for a token before a literal.** A repeated `16` that the project already spells

@@ -34,16 +34,33 @@ describe("a style is named after where it came from", () => {
   });
 
   test.each([
+    ["billing", "billing"],
+    ["Save billing", "saveBilling"],
+    ["h2", "h2"],
+    ["my-element", "myElement"],
+    ["Card", "card"],
+    ["Foo.Bar", "fooBar"],
+  ])("a JSX usage on an element called %p is %s", (elementName, expected) => {
+    expect(name(usage("literal", { elementName }))).toBe(expected);
+    expect(name(usage("cn-call", { elementName }))).toBe(expected);
+  });
+
+  test.each([
     ["literal" as const, 0, "el1"],
     ["literal" as const, 4, "el5"],
     ["cn-call" as const, 1, "el2"],
-  ])("a plain %s at index %p is %s", (kind, index, expected) => {
+  ])("a plain %s with no element name at index %p is %s", (kind, index, expected) => {
     expect(name(usage(kind), index)).toBe(expected);
   });
 
-  // Placeholders on purpose: the agent renames them while reviewing, and a number that matches
-  // the usage's position is the only thing plan and apply can both compute.
-  test("the number is the position in the file, not a running counter", () => {
+  test.each(["", "2col", "---", "42"])(
+    "an element name that is not an identifier (%p) falls back to the position",
+    elementName => {
+      expect(name(usage("literal", { elementName }), 2)).toBe("el3");
+    },
+  );
+
+  test("the fallback number is the position in the file, not a running counter", () => {
     const used = new Set<string>();
     expect(styleNameFor(usage("literal"), 2, used)).toBe("el3");
     expect(styleNameFor(usage("literal"), 7, used)).toBe("el8");
@@ -51,6 +68,12 @@ describe("a style is named after where it came from", () => {
 });
 
 describe("names never collide", () => {
+  test("two divs are div and div2", () => {
+    const used = new Set<string>();
+    const div = usage("literal", { elementName: "div" });
+    expect([styleNameFor(div, 0, used), styleNameFor(div, 1, used)]).toEqual(["div", "div2"]);
+  });
+
   test("two variants with the same axis and value get suffixed", () => {
     const used = new Set<string>();
     const v = usage("cva-variant", { variantAxis: "size", variantValue: "sm" });

@@ -50,7 +50,7 @@ describe("a dry run is genuinely dry", () => {
   test("the result carries the full proposed file, so nothing has to be guessed", () => {
     const file = write("dry2.tsx", `export const A = () => <div className="flex" />;\n`);
     const { diff } = applyFile(sys, file, false);
-    expect(diff).toContain("stylex.props(styles.el1)");
+    expect(diff).toContain("stylex.props(styles.div)");
     expect(diff).toContain("stylex.create");
   });
 });
@@ -72,8 +72,8 @@ export const Card = () => (
 
     expect(result.written).toBe(true);
     expect(result.rewritten).toBe(2);
-    expect(out).toContain("{...stylex.props(styles.el1)}");
-    expect(out).toContain("{...stylex.props(styles.el2)}");
+    expect(out).toContain("{...stylex.props(styles.div)}");
+    expect(out).toContain("{...stylex.props(styles.span)}");
     expect(out).not.toContain("className=");
   });
 
@@ -105,7 +105,7 @@ export const Card = () => (
     const file = write("card5.tsx", source);
     applyFile(sys, file, true);
     const out = fs.readFileSync(file, "utf8");
-    for (const name of ["el1", "el2"]) {
+    for (const name of ["div", "span"]) {
       expect(out).toContain(`stylex.props(styles.${name})`);
       expect(out).toContain(`${name}: {`);
     }
@@ -135,7 +135,7 @@ describe("repeated runs", () => {
 
     expect(result.rewritten).toBe(1);
     expect(out.match(/@stylexjs\/stylex/g)).toHaveLength(1);
-    expect(out).toContain("stylex.props(styles.el1)");
+    expect(out).toContain("stylex.props(styles.div)");
   });
 
   test("an aliased StyleX namespace import is reused", () => {
@@ -146,7 +146,7 @@ describe("repeated runs", () => {
     applyFile(sys, file, true);
     const out = fs.readFileSync(file, "utf8");
 
-    expect(out).toContain("sx.props(styles.el1)");
+    expect(out).toContain("sx.props(styles.div)");
     expect(out).toContain("const styles = sx.create({");
   });
 
@@ -177,7 +177,7 @@ describe("repeated runs", () => {
     expect(second.rewritten).toBe(1);
     expect(second.skipped).toBe(0);
     expect(second.diff?.match(/@stylexjs\/stylex/g)).toHaveLength(1);
-    expect(second.diff).toContain("stylex.props(tw2sxStyles.el1)");
+    expect(second.diff).toContain("stylex.props(tw2sxStyles.div)");
     expect(second.diff).toContain("const styles = stylex.create({");
     expect(second.diff).toContain("const tw2sxStyles = stylex.create({");
   });
@@ -243,7 +243,7 @@ describe("apply refuses everything it cannot rewrite safely", () => {
     expect(result.rewritten).toBe(1);
     expect(result.skipped).toBe(1);
     expect(out).toContain(`className="dark:text-white"`);
-    expect(out).toContain("stylex.props(styles.el2)");
+    expect(out).toContain("stylex.props(styles.b)");
   });
 });
 
@@ -290,17 +290,33 @@ describe("plan and apply agree on what converted", () => {
     expect([planned.converted, planned.skipped]).toEqual([applied.rewritten, applied.skipped]);
   });
 
-  test("both sides number the usages the same way", () => {
-    // `plan` reports styles.el3; a user reading the report must find styles.el3 after apply.
+  test("both sides name the usages the same way", () => {
     const file = write("agree2.tsx", source);
     const planned = processFile(sys, file);
     applyFile(sys, file, true);
     const out = fs.readFileSync(file, "utf8");
 
-    expect(planned.source).toContain("el1: {");
-    expect(out).toContain("stylex.props(styles.el1)");
-    expect(planned.source).toContain("el3: {");
-    expect(out).toContain("stylex.props(styles.el3)");
+    for (const name of ["div", "b"]) {
+      expect(planned.source).toContain(`${name}: {`);
+      expect(out).toContain(`stylex.props(styles.${name})`);
+    }
+  });
+
+  test("names from ids survive an element being inserted above them", () => {
+    const card = `  <section id="billing" className="flex p-4">
+    <h2 className="text-sm">Billing</h2>
+    <button aria-label="Save billing" className={cn("flex", "p-4")}>Save</button>
+  </section>`;
+    const before = write("stable1.tsx", `export const A = () => (\n${card}\n);\n`);
+    const after = write(
+      "stable2.tsx",
+      `export const A = () => (<>\n  <nav aria-label="Account" className="grid" />\n${card}\n</>);\n`,
+    );
+    const namesIn = (file: string): string[] =>
+      [...(processFile(sys, file).source ?? "").matchAll(/^\s{2}(\w+): \{/gm)].map(m => m[1] ?? "");
+
+    expect(namesIn(before)).toEqual(["billing", "h2", "saveBilling"]);
+    expect(namesIn(after)).toEqual(["account", "billing", "h2", "saveBilling"]);
   });
 });
 
@@ -368,7 +384,7 @@ describe("the generated style object never collides with the file's own names", 
     const out = fs.readFileSync(file, "utf8");
 
     expect(out).toContain("const tw2sxStyles = stylex.create({");
-    expect(out).toContain("stylex.props(tw2sxStyles.el1)");
+    expect(out).toContain("stylex.props(tw2sxStyles.div)");
     expect(out).not.toContain("stylex.props(styles.");
   });
 
@@ -380,7 +396,7 @@ describe("the generated style object never collides with the file's own names", 
     const planned = processFile(sys, file);
     applyFile(sys, file, true);
     expect(planned.source).toContain("const tw2sxStyles = stylex.create({");
-    expect(fs.readFileSync(file, "utf8")).toContain("stylex.props(tw2sxStyles.el1)");
+    expect(fs.readFileSync(file, "utf8")).toContain("stylex.props(tw2sxStyles.div)");
   });
 
   test("an unrelated file keeps the plain name", () => {
