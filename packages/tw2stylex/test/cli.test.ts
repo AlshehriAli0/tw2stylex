@@ -128,6 +128,22 @@ describe("plan points at the skill", () => {
   });
 });
 
+describe("explain answers a batch from stdin in one run", () => {
+  test("one JSON object per input line, blank lines skipped", () => {
+    const r = spawnSync("bun", [cli, "explain", "--stdin", "--json", "--css", css], {
+      cwd: repo,
+      encoding: "utf8",
+      input: "flex p-4\n\ndark:text-white\n",
+    });
+    const body: unknown = JSON.parse(r.stdout);
+    expect(body).toMatchObject([
+      { input: "flex p-4", ok: true },
+      { input: "dark:text-white", ok: false },
+    ]);
+    expect(r.status).toBe(EXIT.SOME_SKIPPED);
+  });
+});
+
 /**
  * The published binary runs under Node, the tests run under Bun, and the two disagree about
  * CommonJS. That gap once shipped a build where every command threw on the first `require`.

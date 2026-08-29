@@ -110,48 +110,45 @@ export const initCommand = (args: Args, out: Output): CommandResult => {
   return { exit: EXIT.NOTHING_SKIPPED };
 };
 
-export const explainCommand = async (args: Args, out: Output): Promise<CommandResult> => {
-  const classes = args.positional
-    .slice(1)
-    .flatMap(s => s.split(/\s+/))
-    .filter(Boolean);
-  if (classes.length === 0)
-    return fail(
-      "E_NO_INPUT",
-      EXIT.BAD_ARGUMENTS,
-      "No classes given.",
-      'tw2sx explain "flex items-center p-4"',
-    );
-
-  const css = entryFor(args, process.cwd(), "tw2sx explain <classes>");
-  if (typeof css !== "string") return css;
-
-  const sys = await loadDesignSystem(css);
-  const result = convert(sys.ds, "styles", classes);
-  const skips = result.skips.map(s => toSkipLine("<argv>", 0, 0, s));
-  const source = result.style ? printCreate({ styles: result.style }) : undefined;
-
-  if (out.json)
-    emit({
-      ok: result.skips.length === 0,
-      entry: sys.entry,
-      tailwind: sys.version,
-      stylex: result.style,
-      source,
-      skipped: skips,
-    });
-  else printExplained(source, skips, result);
-
-  return { exit: skips.length > 0 ? EXIT.SOME_SKIPPED : EXIT.NOTHING_SKIPPED };
+const classStringsToExplain = (args: Args): string[] => {
+  const lines = flagWasPassed(args, "stdin")
+    ? fs.readFileSync(0, "utf8").split("\n")
+    : [args.positional.slice(1).join(" ")];
+  return lines.map(line => line.trim()).filter(Boolean);
 };
 
-const printExplained = (
-  source: string | undefined,
-  skips: SkipLine[],
-  result: ReturnType<typeof convert>,
-): void => {
+type Explained = {
+  input: string;
+  style?: Style;
+  rules: number;
+  source?: string;
+  skipped: SkipLine[];
+};
+
+const explain = (sys: LoadedSystem, input: string): Explained => {
+  const { style, rules, skips } = convert(sys.ds, "styles", input.split(/\s+/));
+  return {
+    input,
+    style,
+    rules,
+    source: style ? printCreate({ styles: style }) : undefined,
+    skipped: skips.map(s => toSkipLine("<argv>", 0, 0, s)),
+  };
+};
+
+const explainedJson = (sys: LoadedSystem, e: Explained): unknown => ({
+  ok: e.skipped.length === 0,
+  input: e.input,
+  entry: sys.entry,
+  tailwind: sys.version,
+  stylex: e.style,
+  source: e.source,
+  skipped: e.skipped,
+});
+
+const printExplained = ({ source, skipped, style, rules }: Explained): void => {
   if (source !== undefined) console.log(source);
-  for (const skip of skips)
+  for (const skip of skipped)
     console.log(
       `skipped ${FIX_COLOR[skip.fix](skip.reason)}` +
         `${skip.class === undefined ? "" : ` ${bold(`"${skip.class}"`)}`}: ${skip.detail}` +
@@ -159,10 +156,40 @@ const printExplained = (
     );
   console.log("");
   console.log(
-    result.style
-      ? green(`checked: same declarations as Tailwind (${result.rules} atomic rules)`)
-      : dim(`not converted: ${skips.length} skipped`),
+    style
+      ? green(`checked: same declarations as Tailwind (${rules} atomic rules)`)
+      : dim(`not converted: ${skipped.length} skipped`),
   );
+};
+
+export const explainCommand = async (args: Args, out: Output): Promise<CommandResult> => {
+  const inputs = classStringsToExplain(args);
+  if (inputs.length === 0)
+    return fail(
+      "E_NO_INPUT",
+      EXIT.BAD_ARGUMENTS,
+      "No classes given.",
+      'tw2sx explain "flex items-center p-4", or --stdin with one class string per line',
+    );
+
+  const css = entryFor(args, process.cwd(), "tw2sx explain <classes>");
+  if (typeof css !== "string") return css;
+
+  const sys = await loadDesignSystem(css);
+  const explained = inputs.map(input => explain(sys, input));
+  const fromStdin = flagWasPassed(args, "stdin");
+
+  if (out.json) {
+    const body = explained.map(e => explainedJson(sys, e));
+    emit(fromStdin ? body : body[0]);
+  } else
+    for (const e of explained) {
+      if (fromStdin) console.log(cyan(`> ${e.input}`));
+      printExplained(e);
+    }
+
+  const anySkipped = explained.some(e => e.skipped.length > 0);
+  return { exit: anySkipped ? EXIT.SOME_SKIPPED : EXIT.NOTHING_SKIPPED };
 };
 
 const summarise = (report: Report, fields: string[] | undefined): unknown => ({

@@ -45,6 +45,7 @@ OPTIONS
   --fix <f>           Show one fix type only.
   --out <file>        Where to write the report (default .tw2sx/plan-<hash>.json).
   --all               init only: write to every agent dir, not just the ones present.
+  --stdin             explain only: one class string per line, answered in one run.
   --write             apply only: actually edit files. Without it, apply is a dry run.
   --allow-dirty       apply only: write even with uncommitted changes.
 
