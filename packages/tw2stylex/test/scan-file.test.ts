@@ -104,6 +104,15 @@ describe("anything built at runtime is reported with the classes we could still 
     expect(skip?.hint).toContain("merge-function list");
   });
 
+  test.each(["TONE_BOX[tone]", "tone.box"])(
+    "a member expression (%s) keeps visible classes and is reported",
+    expression => {
+      const usage = first(`<div className={cn("flex", ${expression})} />`);
+      expect(usage?.classNames).toEqual(["flex"]);
+      expect(usage?.skips.map(s => s.reason)).toEqual(["dynamic-classes"]);
+    },
+  );
+
   test("each dynamic hint says what to write instead", () => {
     expect(first(`<div className={a ? "flex" : "hidden"} />`)?.skips[0]?.hint).toContain(
       "separate styles",

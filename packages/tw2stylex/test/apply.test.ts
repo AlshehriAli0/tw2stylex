@@ -152,6 +152,10 @@ describe("apply refuses everything it cannot rewrite safely", () => {
     ],
     ["a descendant selector", `export const A = () => <div className="[&_svg]:size-4" />;`],
     ["a runtime-built class string", `export const A = ({ x }) => <div className={x} />;`],
+    [
+      "a member expression inside a merge call",
+      `export const A = ({ tone }) => <div className={cn("flex p-4", TONE_BOX[tone])} />;`,
+    ],
     ["no classes at all", `export const A = () => <div id="x" />;`],
   ])("%s is left in place", (_name, code) => {
     const file = write(`refuse-${_name.replace(/\W+/g, "-")}.tsx`, `${code}\n`);
