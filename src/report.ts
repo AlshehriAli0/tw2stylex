@@ -1,4 +1,5 @@
 import type { Mismatch } from "./check.ts";
+import { bold, cyan, dim, FIX_COLOR, green, red } from "./color.ts";
 import { fixFor, FIXES, type Fix, type Reason, type Skip } from "./skip.ts";
 
 export type SkipLine = {
@@ -62,9 +63,12 @@ const mismatchLine = (m: Mismatch): string =>
 
 const mismatchSection = (report: Report, limit: number): string[] => {
   const all = report.files.flatMap(f => f.mismatches);
-  const stop =
-    all.length > 0 ? " - STOP: our StyleX does not match Tailwind. This is a tw2sx bug." : "";
-  return [`MISMATCHES: ${all.length}${stop}`, ...all.slice(0, limit).map(mismatchLine)];
+  if (all.length === 0) return [green("MISMATCHES: 0")];
+  return [
+    bold(red(`MISMATCHES: ${all.length}`)) +
+      red(" - STOP: our StyleX does not match Tailwind. This is a tw2sx bug."),
+    ...all.slice(0, limit).map(m => red(mismatchLine(m))),
+  ];
 };
 
 const countByFixAndReason = (skips: SkipLine[]): Map<Fix, Map<string, number>> => {
@@ -82,15 +86,24 @@ const breakdown = (skips: SkipLine[]): string[] => {
   for (const fix of WORK_ORDER) {
     const rows = [...(counts.get(fix) ?? [])].sort((a, b) => b[1] - a[1]);
     if (rows.length === 0) continue;
-    lines.push(`  ${fix}`);
-    for (const [reason, n] of rows) lines.push(`    ${reason.padEnd(22)} ${String(n).padStart(4)}`);
+    lines.push(`  ${FIX_COLOR[fix](fix)}`);
+    for (const [reason, n] of rows)
+      lines.push(`    ${dim(reason.padEnd(22))} ${bold(String(n).padStart(4))}`);
   }
   return lines;
 };
 
+export const paintSkip = (s: SkipLine): string => {
+  const named = s.class === undefined ? "" : ` ${bold(`"${s.class}"`)}`;
+  return (
+    `${dim(`${s.file}:${s.line}:${s.column}:`)} skipped ${FIX_COLOR[s.fix](s.reason)}${named}: ` +
+    `${s.detail} ${dim("fix:")} ${s.hint}`
+  );
+};
+
 const skipSection = (skips: SkipLine[], limit: number): string[] => {
   if (skips.length === 0) return [];
-  const shown = skips.slice(0, limit).map(s => s.message);
+  const shown = skips.slice(0, limit).map(paintSkip);
   const elided = skips.length > limit ? [`\nShowing ${limit} of ${skips.length} skipped.`] : [];
   return ["", ...shown, ...elided, ...breakdown(skips)];
 };
@@ -99,15 +112,21 @@ const nextStep = (skips: SkipLine[], reportPath: string | undefined): string[] =
   if (reportPath === undefined) return [];
   const first = WORK_ORDER.find(fix => skips.some(s => s.fix === fix));
   const next =
-    first === undefined ? [] : [`Next: tw2sx skipped ${reportPath} --fix ${first} --limit 20`];
-  return ["", `Full report: ${reportPath}`, ...next];
+    first === undefined
+      ? []
+      : [`${dim("Next:")} ${cyan(`tw2sx skipped ${reportPath} --fix ${first} --limit 20`)}`];
+  return ["", `${dim("Full report:")} ${reportPath}`, ...next];
 };
+
+const countOf = (skipped: number): string =>
+  skipped === 0 ? green(bold("0")) : FIX_COLOR["check-first"](bold(String(skipped)));
 
 export const renderReport = (report: Report, limit: number, reportPath?: string): string => {
   const { files, usages, converted, skipped } = report.summary;
   const skips = report.files.flatMap(f => f.skips);
   return [
-    `${files} files · ${usages} usages · ${converted} converted · ${skipped} skipped`,
+    `${bold(String(files))} files · ${bold(String(usages))} usages · ` +
+      `${green(bold(String(converted)))} converted · ${countOf(skipped)} skipped`,
     ...mismatchSection(report, limit),
     ...skipSection(skips, limit),
     ...nextStep(skips, reportPath),

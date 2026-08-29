@@ -12,13 +12,14 @@ import {
   type Args,
 } from "./args.ts";
 import { isRecord } from "./cjs.ts";
+import { bold, cyan, dim, FIX_COLOR, green } from "./color.ts";
 import { convert, warmUp } from "./convert.ts";
 import { printCreate } from "./css-to-stylex.ts";
 import { EXIT, fail, type Failure } from "./fail.ts";
 import { collectFiles, findConfig, findEntryCss } from "./find-files.ts";
 import { AGENT_HOMES, homesPresent, installSkill } from "./init.ts";
 import { plan } from "./plan.ts";
-import { renderReport, toSkipLine, type Report, type SkipLine } from "./report.ts";
+import { paintSkip, renderReport, toSkipLine, type Report, type SkipLine } from "./report.ts";
 import { loadDesignSystem } from "./tailwind.ts";
 
 export type CommandResult = { exit: number } | Failure;
@@ -146,13 +147,15 @@ const printExplained = (
   if (source !== undefined) console.log(source);
   for (const skip of skips)
     console.log(
-      `skipped ${skip.reason}${skip.class === undefined ? "" : ` "${skip.class}"`}: ${skip.detail}\n  fix: ${skip.hint}`,
+      `skipped ${FIX_COLOR[skip.fix](skip.reason)}` +
+        `${skip.class === undefined ? "" : ` ${bold(`"${skip.class}"`)}`}: ${skip.detail}` +
+        `\n  ${dim("fix:")} ${skip.hint}`,
     );
   console.log("");
   console.log(
     result.style
-      ? `checked: same declarations as Tailwind (${result.rules} atomic rules)`
-      : `not converted: ${skips.length} skipped`,
+      ? green(`checked: same declarations as Tailwind (${result.rules} atomic rules)`)
+      : dim(`not converted: ${skips.length} skipped`),
   );
 };
 
@@ -237,14 +240,17 @@ type ApplyPrint = {
 };
 
 const printApply = ({ touched, write, rewritten, skipped, target, limit }: ApplyPrint): void => {
-  const mode = write ? "" : "  (DRY RUN - pass --write to edit)";
+  const mode = write ? "" : dim("  (DRY RUN - pass --write to edit)");
   console.log(
-    `${touched.length} files · ${rewritten} usages rewritten · ${skipped} left for you${mode}`,
+    `${bold(String(touched.length))} files · ${green(bold(String(rewritten)))} usages rewritten · ` +
+      `${bold(String(skipped))} left for you${mode}`,
   );
   for (const r of touched.slice(0, limit))
-    console.log(`  ${r.file}: ${r.rewritten} rewritten, ${r.skipped} skipped`);
-  if (touched.length > limit) console.log(`\nShowing ${limit} of ${touched.length} files.`);
-  if (!write && touched.length > 0) console.log(`\nNext: tw2sx apply ${target} --write`);
+    console.log(`  ${dim(r.file)}: ${r.rewritten} rewritten, ${r.skipped} skipped`);
+  if (touched.length > limit)
+    console.log(`\n${dim(`Showing ${limit} of ${touched.length} files.`)}`);
+  if (!write && touched.length > 0)
+    console.log(`\n${dim("Next:")} ${cyan(`tw2sx apply ${target} --write`)}`);
 };
 
 export const applyCommand = async (args: Args, out: Output): Promise<CommandResult> => {
@@ -314,8 +320,9 @@ const openReport = (args: Args): Report | Failure => {
 };
 
 const printSkips = (skips: SkipLine[], shown: SkipLine[]): void => {
-  for (const f of shown) console.log(f.message);
-  if (skips.length > shown.length) console.log(`\nShowing ${shown.length} of ${skips.length}.`);
+  for (const f of shown) console.log(paintSkip(f));
+  if (skips.length > shown.length)
+    console.log(`\n${dim(`Showing ${shown.length} of ${skips.length}.`)}`);
 };
 
 export const skippedCommand = (args: Args, out: Output): CommandResult => {
