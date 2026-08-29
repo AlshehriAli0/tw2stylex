@@ -6,9 +6,9 @@ import path from "node:path";
 import MagicString from "magic-string";
 
 import { convert } from "./convert.ts";
-import { printCreate, type Style } from "./css-to-stylex.ts";
+import { printCreate } from "./css-to-stylex.ts";
 import { scanFile, type ScanResult, type Usage } from "./scan-file.ts";
-import { nameIsTaken, styleNameFor, styleObjectName } from "./style-name.ts";
+import { nameIsTaken, newSheet, styleNameFor, styleObjectName } from "./style-name.ts";
 import type { LoadedSystem } from "./tailwind.ts";
 
 export type ApplyFileResult = {
@@ -70,7 +70,7 @@ export const applyScanned = (
   const stylex = styleXNamespace ?? "stylex";
   const objectName = styleObjectName(nameIsTaken(code));
   const edits = new MagicString(code);
-  const styles: Record<string, Style> = {};
+  const sheet = newSheet();
   const used = new Set<string>();
   let rewritten = 0;
   let skipped = 0;
@@ -85,8 +85,8 @@ export const applyScanned = (
       skipped += 1;
       return;
     }
-    styles[name] = result.style;
-    edits.update(range[0], range[1], `{...${stylex}.props(${objectName}.${name})}`);
+    const shared = sheet.add(result.style, name);
+    edits.update(range[0], range[1], `{...${stylex}.props(${objectName}.${shared})}`);
     rewritten += 1;
   });
 
@@ -94,7 +94,7 @@ export const applyScanned = (
     return { file, written: false, rewritten: 0, skipped, reason: "nothing-convertible" };
 
   if (!hasStyleX) edits.prepend(`import * as stylex from '@stylexjs/stylex';\n`);
-  edits.append(`\n\n${printCreate(styles, objectName, stylex)}\n`);
+  edits.append(`\n\n${printCreate(sheet.styles, objectName, stylex)}\n`);
   const next = edits.toString();
 
   if (write) writeViaTempFile(file, next);
