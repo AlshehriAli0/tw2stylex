@@ -114,12 +114,12 @@ export const readClasses = (node: t.Node): Reader => {
     return undefined;
   };
 
-  const walk = (n: t.Node): string[] => {
-    const classes = written(n) ?? decidedAtRuntime(n);
-    if (classes) return classes;
+  const unsupported = (n: t.Node): string[] => {
     skips.push(dynamic(n, `${n.type} in a class expression`, EXPRESSION_HINT));
     return [];
   };
+
+  const walk = (n: t.Node): string[] => written(n) ?? decidedAtRuntime(n) ?? unsupported(n);
 
   const walkCall = (n: t.CallExpression): string[] => {
     const name = calleeName(n.callee);
