@@ -87,8 +87,10 @@ CSS. Off, StyleX is unlayered and beats everything, polyfilling its own priority
 `@layer priority1…N` and loses to any unlayered rule on the page.
 
 - **Tailwind 4** is layered (`@layer theme, base, components, utilities`), so `true` works from
-  day one when `@stylex;` follows `@import "tailwindcss";` — later-declared layers win. The
-  same holds for the base file kept after Tailwind leaves.
+  day one when `@stylex;` follows `@import "tailwindcss";` — later-declared layers win.
+  `tw2stylex init` sets it in the plugin config it finds at the project root and reports the
+  entry order; re-run it after installing the plugin. The same holds for the base file kept
+  after Tailwind leaves.
 - **Tailwind 3**, a reset, `@font-face`, a global stylesheet are unlayered. `false` until each
   is wrapped — `@import "./reset.css" layer(base);` — then `true`.
 

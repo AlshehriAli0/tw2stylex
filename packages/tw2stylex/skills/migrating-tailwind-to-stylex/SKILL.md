@@ -29,6 +29,8 @@ Pixels stay identical.
       They are the model this skill assumes; every rule below is a corollary. Done when you can
       say, without looking, why StyleX has no descendant selectors.
 - [ ] 2. StyleX installed and proven to render — [setup.md](references/setup.md). Once per project.
+      Then `tw2stylex init` again: with the plugin present it turns on `useCSSLayers` for
+      Tailwind 4 and checks the entry CSS order.
 - [ ] 3. Tokens and shared primitives in place before any component converts —
       [tokens.md](references/tokens.md). Every component references them, so converting first
       means converting twice.
