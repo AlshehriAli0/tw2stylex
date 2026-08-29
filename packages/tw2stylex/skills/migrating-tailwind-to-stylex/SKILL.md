@@ -151,6 +151,10 @@ each file rather than in a pass of their own:
 - **Rename the guessed names.** A style is named after its element's `id`, then `aria-label`,
   then tag: `billing`, `saveBilling`, `div2`. A tag-derived name says where, so call it what
   the element is: `card`, `label`, `icon`.
+- **One entry per distinct style.** Elements with the same declarations share one
+  `styles.x`. tw2sx writes each style once and points every matching element at it; when you
+  write StyleX by hand, reuse the entry that already says it. A duplicate is two places to edit
+  and a bigger bundle for the same CSS.
 - **Keep styles beside their markup.** Co-location is the point of StyleX; resist collecting a
   file's styles into a shared module.
 - **Reach for a token before a literal.** A repeated `16` that the project already spells

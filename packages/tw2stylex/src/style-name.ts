@@ -1,4 +1,4 @@
-import { IDENT } from "./css-to-stylex.ts";
+import { IDENT, type Style } from "./css-to-stylex.ts";
 import type { Usage } from "./scan-file.ts";
 
 const camelise = (s: string): string =>
@@ -32,6 +32,22 @@ export const styleNameFor = (usage: Usage, index: number, used: Set<string>): st
   }
   used.add(name);
   return name;
+};
+
+export type Sheet = { styles: Record<string, Style>; add: (style: Style, name: string) => string };
+
+export const newSheet = (): Sheet => {
+  const styles: Record<string, Style> = {};
+  const nameByStyle = new Map<string, string>();
+  const add = (style: Style, name: string): string => {
+    const key = JSON.stringify(style);
+    const shared = nameByStyle.get(key);
+    if (shared !== undefined) return shared;
+    nameByStyle.set(key, name);
+    styles[name] = style;
+    return name;
+  };
+  return { styles, add };
 };
 
 const PREFERRED = ["styles", "tw2sxStyles"];

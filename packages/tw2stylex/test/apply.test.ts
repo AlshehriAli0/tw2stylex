@@ -305,7 +305,7 @@ describe("plan and apply agree on what converted", () => {
   test("names from ids survive an element being inserted above them", () => {
     const card = `  <section id="billing" className="flex p-4">
     <h2 className="text-sm">Billing</h2>
-    <button aria-label="Save billing" className={cn("flex", "p-4")}>Save</button>
+    <button aria-label="Save billing" className={cn("flex", "p-2")}>Save</button>
   </section>`;
     const before = write("stable1.tsx", `export const A = () => (\n${card}\n);\n`);
     const after = write(
@@ -317,6 +317,54 @@ describe("plan and apply agree on what converted", () => {
 
     expect(namesIn(before)).toEqual(["billing", "h2", "saveBilling"]);
     expect(namesIn(after)).toEqual(["account", "billing", "h2", "saveBilling"]);
+  });
+});
+
+describe("one style entry per distinct style", () => {
+  const entriesIn = (source: string): string[] =>
+    [...source.matchAll(/^\s{2}(\w+): \{/gm)].map(m => m[1] ?? "");
+
+  test("two elements with the same classes share one entry", () => {
+    const file = write(
+      "dupe.tsx",
+      `export const A = () => (<div className="flex p-4"><span className="flex p-4" /></div>);\n`,
+    );
+    const out = applyFile(sys, file, false).diff ?? "";
+
+    expect(entriesIn(out)).toEqual(["div"]);
+    expect(out.match(/stylex\.props\(styles\.div\)/g)).toHaveLength(2);
+  });
+
+  test("class order and cn() do not make a second entry", () => {
+    const file = write(
+      "dupe-order.tsx",
+      `export const A = () => (<div className="flex p-4"><b className={cn("p-4", "flex")} /></div>);\n`,
+    );
+    const out = applyFile(sys, file, false).diff ?? "";
+
+    expect(entriesIn(out)).toEqual(["div"]);
+    expect(out).toContain("<b {...stylex.props(styles.div)} />");
+  });
+
+  test("a later usage keeps its own name once its style differs", () => {
+    const file = write(
+      "dupe-differs.tsx",
+      `export const A = () => (<div className="flex"><span className="flex" /><span className="grid" /></div>);\n`,
+    );
+    const out = applyFile(sys, file, false).diff ?? "";
+
+    expect(entriesIn(out)).toEqual(["div", "span2"]);
+  });
+
+  test("plan prints the same single entry and still counts every usage", () => {
+    const file = write(
+      "dupe-plan.tsx",
+      `export const A = () => (<div className="flex p-4"><span className="flex p-4" /></div>);\n`,
+    );
+    const planned = processFile(sys, file);
+
+    expect(entriesIn(planned.source ?? "")).toEqual(["div"]);
+    expect(planned.converted).toBe(2);
   });
 });
 

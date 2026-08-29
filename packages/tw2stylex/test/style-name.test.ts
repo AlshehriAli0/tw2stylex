@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { Usage, UsageKind } from "../src/scan-file.ts";
-import { nameIsTaken, styleNameFor, styleObjectName } from "../src/style-name.ts";
+import { nameIsTaken, newSheet, styleNameFor, styleObjectName } from "../src/style-name.ts";
 
 const usage = (kind: UsageKind, over: Partial<Usage> = {}): Usage => ({
   classNames: ["flex"],
@@ -139,5 +139,28 @@ describe("the style object avoids names the file already uses", () => {
 
   test("a longer name that merely contains the candidate does not count as a clash", () => {
     expect(nameFor(`const styleSheet = 1; const myStyles = 2;`)).toBe("styles");
+  });
+});
+
+describe("a sheet holds each style once", () => {
+  test("the same style added twice keeps the first name", () => {
+    const sheet = newSheet();
+    expect(sheet.add({ display: "flex" }, "div")).toBe("div");
+    expect(sheet.add({ display: "flex" }, "span")).toBe("div");
+    expect(Object.keys(sheet.styles)).toEqual(["div"]);
+  });
+
+  test("a different style gets its own entry", () => {
+    const sheet = newSheet();
+    sheet.add({ display: "flex" }, "div");
+    expect(sheet.add({ display: "grid" }, "span")).toBe("span");
+    expect(Object.keys(sheet.styles)).toEqual(["div", "span"]);
+  });
+
+  test("equal nested conditions count as the same style", () => {
+    const sheet = newSheet();
+    const hover = () => ({ color: { default: "red", ":hover": "blue" } });
+    sheet.add(hover(), "a");
+    expect(sheet.add(hover(), "b")).toBe("a");
   });
 });

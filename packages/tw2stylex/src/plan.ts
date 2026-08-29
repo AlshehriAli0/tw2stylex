@@ -1,10 +1,10 @@
 import fs from "node:fs";
 
 import { convert, warmUp } from "./convert.ts";
-import { printCreate, type Style } from "./css-to-stylex.ts";
+import { printCreate } from "./css-to-stylex.ts";
 import { toSkipLine, type FileResult, type Report } from "./report.ts";
 import { scanFile, type ScanResult } from "./scan-file.ts";
-import { nameIsTaken, styleNameFor, styleObjectName } from "./style-name.ts";
+import { nameIsTaken, newSheet, styleNameFor, styleObjectName } from "./style-name.ts";
 import { loadDesignSystem, type LoadedSystem } from "./tailwind.ts";
 
 const verdictFor = (total: number, converted: number, skipped: number): FileResult["verdict"] => {
@@ -29,7 +29,7 @@ const scanOne = (file: string): Scanned => {
 const resultFor = (sys: LoadedSystem, { file, usages, objectName }: Scanned): FileResult => {
   const lines: FileResult["skips"] = [];
   const mismatches: FileResult["mismatches"] = [];
-  const styles: Record<string, Style> = {};
+  const sheet = newSheet();
   const used = new Set<string>();
   let converted = 0;
 
@@ -42,7 +42,7 @@ const resultFor = (sys: LoadedSystem, { file, usages, objectName }: Scanned): Fi
     mismatches.push(...result.mismatches);
 
     if (skips.length === 0 && result.style) {
-      styles[name] = result.style;
+      sheet.add(result.style, name);
       converted += 1;
     }
   });
@@ -55,7 +55,7 @@ const resultFor = (sys: LoadedSystem, { file, usages, objectName }: Scanned): Fi
     usages: total,
     converted,
     skipped,
-    source: Object.keys(styles).length > 0 ? printCreate(styles, objectName) : undefined,
+    source: converted > 0 ? printCreate(sheet.styles, objectName) : undefined,
     skips: lines,
     mismatches,
   };
