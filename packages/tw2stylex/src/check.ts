@@ -90,8 +90,7 @@ export const compileStyleX = (
   const code = `import * as stylex from '@stylexjs/stylex';\n${source}\nexport { styles };\n`;
   try {
     const res = babelTransform()(code, babelOptions());
-    if (res?.code === null || res?.code === undefined)
-      throw new Error("StyleX compiler emitted no code.");
+    if (typeof res?.code !== "string") throw new Error("StyleX compiler emitted no code.");
     const rules = readMeta(res?.metadata).map(([className, rule, priority]) => ({
       className,
       css: rule.ltr,
