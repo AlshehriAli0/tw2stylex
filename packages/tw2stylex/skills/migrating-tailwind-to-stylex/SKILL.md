@@ -145,16 +145,15 @@ later. That is the sanctioned escape hatch; record each use in your summary.
 
 ## What good output looks like
 
-The tool is correct, not tasteful. Three things it leaves for you, worth doing as you review
-each file rather than in a pass of their own:
+The tool is correct, not tasteful. What it leaves for you, worth doing as you review each
+file rather than in a pass of their own:
 
 - **Rename the guessed names.** A style is named after its element's `id`, then `aria-label`,
   then tag: `billing`, `saveBilling`, `div2`. A tag-derived name says where, so call it what
   the element is: `card`, `label`, `icon`.
-- **One entry per distinct style.** Elements with the same declarations share one
-  `styles.x`. tw2sx writes each style once and points every matching element at it; when you
-  write StyleX by hand, reuse the entry that already says it. A duplicate is two places to edit
-  and a bigger bundle for the same CSS.
+- **One entry per distinct style.** Elements with the same declarations share one `styles.x`.
+  Before adding a style by hand, look for the entry that already says it and point the element
+  at that.
 - **Keep styles beside their markup.** Co-location is the point of StyleX; resist collecting a
   file's styles into a shared module.
 - **Reach for a token before a literal.** A repeated `16` that the project already spells
