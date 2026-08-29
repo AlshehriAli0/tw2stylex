@@ -37,10 +37,9 @@ export default defineConfig({
 options. **Next.js** needs `babel.config.js` plus `postcss.config.js` — copy them from the
 installation doc linked above rather than from memory.
 
-**Vitest** reads `vite.config.ts` only when no higher-priority Vitest config replaces it. A
-separate `vitest.config.ts` overrides the Vite config, and isolated `test.projects` do not inherit
-parent plugins unless they opt in. Every project that imports StyleX source must include or
-inherit the transform. For an isolated DOM project, the direct setup is:
+**Vitest** — a separate `vitest.config.ts` replaces `vite.config.ts`, and each entry in
+`test.projects` starts with an empty plugin list. Every config that imports StyleX source needs
+the plugin too:
 
 ```ts
 // vitest.config.ts
@@ -58,8 +57,8 @@ export default defineConfig({
 });
 ```
 
-`Unexpected 'stylex.create' call at runtime` means that test project did not run the transform.
-An application build passing proves only that the application config is wired.
+`Unexpected 'stylex.create' call at runtime` in a test means that project ran without the
+plugin, even when the app build passes.
 
 **Every setup needs a CSS entrypoint.** One CSS file, imported from the app root, containing:
 
