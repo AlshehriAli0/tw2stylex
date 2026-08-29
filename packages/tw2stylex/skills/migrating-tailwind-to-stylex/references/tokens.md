@@ -44,6 +44,17 @@ Ask one question per token group: *does anything override this at runtime?*
 
 Both must live in a `*.stylex.ts` file, be **named exports**, and be the only exports in it.
 
+**Every variable in a `defineVars` group ships, used or not** (facebook/stylex#717, open). A
+group holding Tailwind's full palette emits hundreds of declarations for the three colours the
+app uses. Define the tokens `grep -rn "var(--"` and the converted code reference, split groups
+by concern, and put anything with no runtime override in `defineConsts`, which emits nothing.
+`postcss-prune-var` is the maintainers' stopgap when a large group is unavoidable.
+
+**Match the literal.** A StyleX atom is keyed on the value string, so `padding: 16`, `'16px'`
+and `'1rem'` are three rules. `tw2stylex` emits Tailwind's own form — `'1rem'`, `oklch(…)`,
+`calc(infinity * 1px)`; `tw2stylex explain` prints it. Hand-written values take that form, or
+a token, which covers both sides.
+
 ## The `--` literal-key bridge
 
 A `--`-prefixed key makes `defineVars` emit that exact CSS variable name instead of a hashed
@@ -114,15 +125,16 @@ Three options, in order of preference:
 1. **`light-dark()`** — verified working as a plain value:
    `color: 'light-dark(black, white)'`. Encode both palettes in one token and let
    `color-scheme` decide. Simplest, no theme plumbing, works with a three-way
-   system/light/dark toggle.
+   system/light/dark toggle, and one declaration where a `dark:` pair was two.
 2. **`stylex.createTheme()`** — when you need more than two palettes, or per-subtree overrides.
-   Apply the theme on the element that currently carries `.dark`.
+   Apply the theme on the element that currently carries `.dark`. Each theme re-declares the
+   whole variable group at doubled specificity, so keep themed groups small.
 3. **`@media (prefers-color-scheme: dark)` inside `defineVars`** — only when the project has no
    class toggle. Note `defineVars` values accept `default` plus **at-rule keys only**; a class
    or attribute selector there does not work, which is why class-based dark mode needs (1) or (2).
 
 ## What to expect
 
-StyleX styling code runs roughly **2× the lines** of the Tailwind it replaces for identical CSS
-output. That is expected, not a smell. Say so in your summary so nobody reads it as a
-regression.
+StyleX styling code runs roughly **2× the lines** of the Tailwind it replaces, and the
+stylesheet lands at **parity** — both are atomic CSS ([css-size.md](css-size.md)). Say both in
+your first summary so nobody reads either as a regression.

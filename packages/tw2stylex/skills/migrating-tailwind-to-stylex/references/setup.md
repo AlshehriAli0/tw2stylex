@@ -30,7 +30,7 @@ Use the project's own package manager — `bun add`, `pnpm add`, `yarn add`.
 import stylex from '@stylexjs/unplugin/vite';
 
 export default defineConfig({
-  plugins: [stylex({ useCSSLayers: false }), react()],
+  plugins: [stylex({ useCSSLayers: true }), react()],   // see "Two settings" below
 });
 ```
 
@@ -58,7 +58,7 @@ export default defineConfig({
   test: {
     projects: [
       {
-        plugins: [stylex({ useCSSLayers: false })],
+        plugins: [stylex({ useCSSLayers: true })],
         test: { name: 'dom', environment: 'jsdom' },
       },
     ],
@@ -72,17 +72,29 @@ plugin, even when the app build passes.
 **Every setup needs a CSS entrypoint.** One CSS file, imported from the app root, containing:
 
 ```css
+@import "tailwindcss";   /* while Tailwind is still in the build */
 @stylex;
 ```
 
-The plugin appends every generated rule to that file. Without it nothing is emitted at all.
+The plugin replaces `@stylex;` with every generated rule. Without it nothing is emitted at all;
+with two of them (or the CLI and the unplugin on the same files) every rule ships twice.
 
 ## Two settings the migration needs
 
-**`useCSSLayers: false` while any unlayered CSS is in the build.** Unlayered CSS beats layered
-CSS, so with layers on StyleX loses to Tailwind, to the base layer you keep after Tailwind, to a
-reset, to `@font-face`, to a global stylesheet. Flip it to `true` only when none of those
-remain, which for most projects means never.
+**`useCSSLayers` decides who wins, and costs a third of the CSS.** Unlayered CSS beats layered
+CSS. Off, StyleX is unlayered and beats everything, polyfilling its own priority order with
+`:not(#\#)` on nearly every rule — a third of the raw stylesheet. On, StyleX sits in
+`@layer priority1…N` and loses to any unlayered rule on the page.
+
+- **Tailwind 4** is layered (`@layer theme, base, components, utilities`), so `true` works from
+  day one when `@stylex;` follows `@import "tailwindcss";` — later-declared layers win. The
+  same holds for the base file kept after Tailwind leaves.
+- **Tailwind 3**, a reset, `@font-face`, a global stylesheet are unlayered. `false` until each
+  is wrapped — `@import "./reset.css" layer(base);` — then `true`.
+
+Rules that set CSS custom properties are emitted outside any layer (facebook/stylex#1611), so a
+layered global cannot override a StyleX variable. `tw2stylex plan` verifies declarations, not
+cascade order; the screenshot diff in SKILL.md step 10 is what proves the choice.
 
 **`include` covering the files you are migrating**, for the Next.js/PostCSS path. A file outside
 the pattern compiles to nothing.
@@ -145,8 +157,17 @@ npm install --save-dev @stylexjs/eslint-plugin
 catches at lint time much of what StyleX otherwise drops silently, which is the whole hazard
 class this skill exists to handle.
 
-## Performance
+## Production config
 
-StyleX compiles to static CSS, so styles created and applied in one file cost nothing at
-runtime. Two things keep the build itself fast: narrow `include`/`exclude` patterns, and
-`treeshakeCompensation: true` if your bundler is dropping styles it should keep.
+The defaults are right. Each option here is listed because a project that changed it ships a
+bigger build with no warning:
+
+| option | production value | otherwise |
+|---|---|---|
+| `dev` | `false` | styles injected at runtime, no static CSS file |
+| `debug` | `false` | `data-style-src` on every element; with `enableDebugClassNames`, longer selectors |
+| `runtimeInjection` | `false` | the style-injection runtime ships in the JS bundle |
+| `styleResolution` | `'property-specificity'` | `legacy-expand-shorthands` expands every shorthand, +20% CSS; `application-order` bloats compiled JS |
+
+`treeshakeCompensation: true` is the fix when the bundler drops a `.stylex.ts` import a style
+depends on. Narrow `include`/`exclude` keeps the build fast.
