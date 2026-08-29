@@ -115,6 +115,18 @@ describe("plan points at the skill", () => {
     }
   });
 
+  // The report lists every class string, and Tailwind 4 scans any file git does not ignore, so
+  // an unignored report keeps every converted utility alive in the Tailwind bundle.
+  test("and gitignores the report directory before init has run", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tw2stylex-ignore-"));
+    try {
+      planIn(dir);
+      expect(fs.readFileSync(path.join(dir, ".gitignore"), "utf8")).toContain(".tw2stylex/");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("at the installed SKILL.md once it is", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tw2stylex-skill-"));
     try {

@@ -239,6 +239,8 @@ export const planCommand = async (args: Args, out: Output): Promise<CommandResul
   const hash = crypto.createHash("sha1").update(files.join("\n")).digest("hex").slice(0, 6);
   const reportPath = flagString(args, "out") ?? path.join(".tw2stylex", `plan-${hash}.json`);
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+  // The report holds every class string; Tailwind 4 scans any file git does not ignore.
+  if (!flagString(args, "out")) ignoreReports(process.cwd());
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
 
   if (out.json) emit(summarise(report, out.fields));

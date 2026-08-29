@@ -81,7 +81,7 @@ Then take the scaffolding back out:
       is defined outside Tailwind's `@theme` — [tokens.md](references/tokens.md).
 - [ ] Remove `tailwindcss`, its entry CSS, and `tw2stylex` from the project.
 - [ ] Measure the production CSS, gzipped, against the last Tailwind commit. Done when it is
-      no larger, or when each cause in [css-size.md](references/css-size.md) is fixed or ruled out.
+      smaller, or when each cause in [css-size.md](references/css-size.md) is fixed or ruled out.
 
 ## Reading a skip
 

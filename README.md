@@ -86,6 +86,11 @@ Exit codes: `0` clean · `1` finished with skips · `2` usage · `3` preconditio
 Run against a production Tailwind app: 970 files, 7,125 usages, 5,509 converted, zero
 mismatches, 809ms. Node and Bun produce identical output.
 
+The output is smaller than what it replaces: tw2stylex writes the resolved literal where Tailwind
+4 writes `calc(var(--spacing) * 4)` and five `--tw-*` slots. Measured on 128 utilities, minified,
+`useCSSLayers: true`: 10,561 → 5,306 bytes raw, 2,682 → 2,178 gzipped. `tw2stylex init` turns
+layers on; [css-size.md] has what to check when a bundle grows anyway.
+
 [SKILL.md]: skills/migrating-tailwind-to-stylex/SKILL.md
 [reason-codes.md]: skills/migrating-tailwind-to-stylex/references/reason-codes.md
 [tokens.md]: skills/migrating-tailwind-to-stylex/references/tokens.md
