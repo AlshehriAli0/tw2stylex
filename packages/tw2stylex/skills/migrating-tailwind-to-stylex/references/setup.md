@@ -37,6 +37,29 @@ export default defineConfig({
 options. **Next.js** needs `babel.config.js` plus `postcss.config.js` — copy them from the
 installation doc linked above rather than from memory.
 
+**Vitest** — a separate `vitest.config.ts` replaces `vite.config.ts`, and each entry in
+`test.projects` starts with an empty plugin list. Every config that imports StyleX source needs
+the plugin too:
+
+```ts
+// vitest.config.ts
+import stylex from '@stylexjs/unplugin';
+
+export default defineConfig({
+  test: {
+    projects: [
+      {
+        plugins: [stylex.vite({ useCSSLayers: false })],
+        test: { name: 'dom', environment: 'jsdom' },
+      },
+    ],
+  },
+});
+```
+
+`Unexpected 'stylex.create' call at runtime` in a test means that project ran without the
+plugin, even when the app build passes.
+
 **Every setup needs a CSS entrypoint.** One CSS file, imported from the app root, containing:
 
 ```css
