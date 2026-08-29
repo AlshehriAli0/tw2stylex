@@ -1,37 +1,31 @@
 # CSS size
 
-Read when a CSS bundle grew, before quoting anyone a number, and for the measurement step in
-"Finishing".
+Read when a CSS bundle grew, and for the measurement step in "Finishing".
 
-## Parity is the target
+## How the size works
 
-Tailwind is already atomic CSS. So is StyleX: one rule per distinct
-`(property, value, condition)`, deduped across the app, keyed on the value string and nothing
-else — the namespace, file and style name are outside the hash, so a namespace per element
-costs no CSS. For the same utilities the two stylesheets are the same size. StyleX's "80%
-smaller" and "plateaus as the codebase grows" are measured against hand-written per-component
-CSS.
-
-Measured, StyleX 0.19 vs Tailwind 4.3, one 66-element corpus, production build: +7% raw with
-`useCSSLayers: true`, +53% with it off, about +60% gzipped either way because hashed class
-names do not compress. A published 20-component migration: 20,379 → 20,561 bytes. Anything
-beyond that has a cause below.
+StyleX emits one rule per distinct `(property, value, condition)`, deduped across the app. The
+atom is keyed on the value string and the condition — the namespace, file and style name are
+outside the hash, so a namespace per element costs no CSS, and the same declaration written in
+fifty files costs one rule. The stylesheet grows with the number of distinct declarations, and
+every cause below adds declarations or bytes per rule.
 
 ## Measure
 
 - The production build, after Tailwind is gone. Mid-migration two atomic stylesheets are on
-  the page, so the total rises before it falls.
+  the page.
 - One StyleX CSS file — [setup.md](setup.md) "CSS entrypoint". Tailwind 4 scans every
   non-gitignored file, so the class strings in this skill's examples reach the Tailwind bundle
   until `.claude`/`.agents` is excluded with `@source not`.
 - `dev`, `debug`, `runtimeInjection` all `false` — [setup.md](setup.md) "Production config".
-- Gzipped, after the bundler's minifier. StyleX's per-atom `@media` wrappers compress away.
+- Gzipped, after the bundler's minifier.
 
 ## Causes, largest first
 
 **`useCSSLayers: false`.** StyleX polyfills its priority order by appending `:not(#\#)` to every
-rule above the lowest priority — a third of the raw bytes. The rule for turning layers on is in
-[setup.md](setup.md).
+rule above the lowest priority — a third of the raw bytes (measured: 7,863 → 5,475 on a
+66-element corpus). `tw2stylex init` turns layers on for Tailwind 4; the rule for other setups
+is in [setup.md](setup.md).
 
 **Every variable in a `defineVars` group ships** (facebook/stylex#717, open). Define the tokens
 the code uses; constants go in `defineConsts` — [tokens.md](tokens.md).
@@ -61,8 +55,8 @@ on; it is what makes a breakpoint ladder resolve in order.
 element or a JS condition. Tailwind's `before:`, `after:`, `first:`, `last:` convert correctly;
 take the guide's route when the component is open for other reasons.
 
-## Where StyleX does shrink
+## What leaves with Tailwind
 
-Tailwind's `@property` registrations and `--tw-*` slot variables leave with it; `light-dark()`
-tokens replace `dark:` pairs; and with every style beside its markup, no unused CSS ships.
-Those are the levers.
+Its `@property` registrations and `--tw-*` slot variables, plugin CSS (`tw-animate-css`,
+typography), `@apply` component classes, and every utility a dynamic class string kept alive.
+Preflight stays — "Leaving Tailwind" in [setup.md](setup.md).

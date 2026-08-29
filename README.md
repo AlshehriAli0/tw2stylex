@@ -54,8 +54,8 @@ Each one says what stopped it, and how much work it will be:
 | `unknown` | investigate; often not a Tailwind class at all |
 
 There are 18 reasons. [reason-codes.md] walks through each one. [tokens.md] covers `@theme`
-tokens and dark mode. [css-size.md] explains why the stylesheet comes out the same size as
-Tailwind's, not smaller, and what makes it bigger.
+tokens and dark mode. [css-size.md] lists what makes the stylesheet bigger than it needs to be,
+and the fix for each.
 
 ## For agents
 

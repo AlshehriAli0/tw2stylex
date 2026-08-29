@@ -80,8 +80,8 @@ Then take the scaffolding back out:
 - [ ] `grep -rn "var(--" src`: each variable it finds is a project token. Done when every one
       is defined outside Tailwind's `@theme` — [tokens.md](references/tokens.md).
 - [ ] Remove `tailwindcss`, its entry CSS, and `tw2stylex` from the project.
-- [ ] Measure the production CSS, gzipped, against the last Tailwind commit. Done at parity,
-      or when every excess byte has a cause named from [css-size.md](references/css-size.md).
+- [ ] Measure the production CSS, gzipped, against the last Tailwind commit. Done when it is
+      no larger, or when each cause in [css-size.md](references/css-size.md) is fixed or ruled out.
 
 ## Reading a skip
 
@@ -209,9 +209,8 @@ file rather than in a pass of their own:
 - [setup.md](references/setup.md) — installing StyleX, wiring the build, the CSS entrypoint,
   `useCSSLayers`, the production config, proving it renders. Read it before the first
   conversion in a project, or when a converted component renders unstyled.
-- [css-size.md](references/css-size.md) — parity as the target, how to measure, the ranked
-  causes of a bigger bundle. Read it when the CSS grew, before quoting a number, and for the
-  measurement step in Finishing.
+- [css-size.md](references/css-size.md) — how to measure, and the ranked causes of a bigger
+  bundle with their fixes. Read it when the CSS grew, and for the measurement step in Finishing.
 
 The three pages from step 1 are the authority. Fetch them again for any API this skill does not
 cover, and to check a rule here that looks wrong.
