@@ -17,7 +17,7 @@ export type Usage = {
   skips: Skip[];
 };
 
-export type ScanResult = { usages: Usage[]; hasStyleX: boolean };
+export type ScanResult = { usages: Usage[]; hasStyleX: boolean; styleXNamespace?: string };
 
 const MERGE_FNS = new Set(["cn", "clsx", "classnames", "twMerge", "twJoin", "cx"]);
 
@@ -274,6 +274,7 @@ export const scanFile = (code: string, filename: string): ScanResult => {
 
   const usages: Usage[] = [];
   let hasStyleX = false;
+  let styleXNamespace: string | undefined;
   const elementOf = new Map<t.JSXAttribute, t.JSXOpeningElement>();
 
   const claimAttributes = (element: t.JSXOpeningElement): void => {
@@ -290,7 +291,12 @@ export const scanFile = (code: string, filename: string): ScanResult => {
   };
 
   const readImport = (declaration: t.ImportDeclaration): void => {
-    if (declaration.source.value.startsWith("@stylexjs/")) hasStyleX = true;
+    const from = declaration.source.value;
+    if (!from.startsWith("@stylexjs/")) return;
+    hasStyleX = true;
+    const namespace = declaration.specifiers.find(t.isImportNamespaceSpecifier);
+    if (namespace && from === "@stylexjs/stylex" && declaration.importKind !== "type")
+      styleXNamespace = namespace.local.name;
   };
 
   t.traverseFast(ast, node => {
@@ -300,5 +306,5 @@ export const scanFile = (code: string, filename: string): ScanResult => {
     else if (t.isImportDeclaration(node)) readImport(node);
   });
 
-  return { usages, hasStyleX };
+  return { usages, hasStyleX, styleXNamespace };
 };
