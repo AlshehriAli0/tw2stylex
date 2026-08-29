@@ -78,7 +78,7 @@ Tailwind you have not deleted yet and migrated components keep their old styles.
 **`include` covering the files you are migrating**, for the Next.js/PostCSS path. A file outside
 the pattern compiles to nothing.
 
-## Prove it works before converting anything
+## Prove development works before converting anything
 
 Style one `<div>` by hand, load the page, read its computed styles:
 
@@ -90,6 +90,19 @@ const check = stylex.create({ it: { backgroundColor: 'red' } });
 
 Red means the plugin, the entrypoint and the import are all correct. Not red means the build
 is not wired, and every conversion after this point will look broken for that reason alone.
+
+## Prove production works too
+
+Before deleting the red check, run the project's real production build (and its SSR build, if
+it has one) and look at the output:
+
+- One emitted CSS file contains the red StyleX rule.
+- No production JavaScript contains `stylex.create` or a `virtual:stylex` import.
+- If the app has SSR, one production render completes without a StyleX runtime error.
+
+A passing typecheck only proves `@stylexjs/stylex` is installed. The CSS file proves the compiler
+ran; the JavaScript and SSR checks prove it ran in every build. Use the project's own build
+commands and output directories.
 
 ## When styles do not appear
 
