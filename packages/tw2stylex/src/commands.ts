@@ -86,7 +86,7 @@ const requireExistingPath = (target: string | undefined, usage: string): string 
 const readTheSkill = (root = process.cwd()): string => {
   const skill = installedSkills(root)[0];
   return skill === undefined
-    ? `${dim("Skill:")} run ${cyan("tw2sx init")}, then read the SKILL.md it writes in full before working the skips.`
+    ? `${dim("Skill:")} run ${cyan("tw2stylex init")}, then read the SKILL.md it writes in full before working the skips.`
     : `${dim("Skill:")} read ${cyan(skill)} in full before working the skips.`;
 };
 
@@ -102,9 +102,9 @@ export const initCommand = (args: Args, out: Output): CommandResult => {
   ignoreReports(root);
   if (out.json) emit(installed);
   else {
-    console.log(`tw2sx ${installed.version}: skill installed`);
+    console.log(`tw2stylex ${installed.version}: skill installed`);
     for (const destination of installed.destinations) console.log(`  ${destination}`);
-    console.log(`  .gitignore ignores ${dim(".tw2sx/")}`);
+    console.log(`  .gitignore ignores ${dim(".tw2stylex/")}`);
     console.log(`\n${readTheSkill(root)}`);
   }
   return { exit: EXIT.NOTHING_SKIPPED };
@@ -169,10 +169,10 @@ export const explainCommand = async (args: Args, out: Output): Promise<CommandRe
       "E_NO_INPUT",
       EXIT.BAD_ARGUMENTS,
       "No classes given.",
-      'tw2sx explain "flex items-center p-4", or --stdin with one class string per line',
+      'tw2stylex explain "flex items-center p-4", or --stdin with one class string per line',
     );
 
-  const css = entryFor(args, process.cwd(), "tw2sx explain <classes>");
+  const css = entryFor(args, process.cwd(), "tw2stylex explain <classes>");
   if (typeof css !== "string") return css;
 
   const sys = await loadDesignSystem(css);
@@ -214,10 +214,10 @@ const planExit = (report: Report): number => {
 };
 
 export const planCommand = async (args: Args, out: Output): Promise<CommandResult> => {
-  const target = requireExistingPath(positionalAt(args, 1), "tw2sx plan src/components/ui");
+  const target = requireExistingPath(positionalAt(args, 1), "tw2stylex plan src/components/ui");
   if (typeof target !== "string") return target;
 
-  const css = entryFor(args, containingDir(target), `tw2sx plan ${target}`);
+  const css = entryFor(args, containingDir(target), `tw2stylex plan ${target}`);
   if (typeof css !== "string") return css;
 
   const startedAt = Date.now();
@@ -226,7 +226,7 @@ export const planCommand = async (args: Args, out: Output): Promise<CommandResul
   const elapsedMs = Date.now() - startedAt;
 
   const hash = crypto.createHash("sha1").update(files.join("\n")).digest("hex").slice(0, 6);
-  const reportPath = flagString(args, "out") ?? path.join(".tw2sx", `plan-${hash}.json`);
+  const reportPath = flagString(args, "out") ?? path.join(".tw2stylex", `plan-${hash}.json`);
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
 
@@ -287,18 +287,18 @@ const printApply = (p: ApplyPrint): void => {
   if (touched.length > limit)
     console.log(`\n${dim(`Showing ${limit} of ${touched.length} files.`)}`);
   if (!write && touched.length > 0)
-    console.log(`\n${dim("Next:")} ${cyan(`tw2sx apply ${target} --write`)}`);
+    console.log(`\n${dim("Next:")} ${cyan(`tw2stylex apply ${target} --write`)}`);
 };
 
 export const applyCommand = async (args: Args, out: Output): Promise<CommandResult> => {
-  const target = requireExistingPath(positionalAt(args, 1), "tw2sx apply src/components/ui");
+  const target = requireExistingPath(positionalAt(args, 1), "tw2stylex apply src/components/ui");
   if (typeof target !== "string") return target;
 
   const write = flagWithoutValue(args, "write");
   const blocked = writeWouldClobber(args, target, write) ? dirtyGuard(target) : undefined;
   if (blocked) return blocked;
 
-  const css = entryFor(args, containingDir(target), `tw2sx apply ${target}`);
+  const css = entryFor(args, containingDir(target), `tw2stylex apply ${target}`);
   if (typeof css !== "string") return css;
 
   const startedAt = Date.now();
@@ -351,7 +351,7 @@ const openReport = (args: Args): Report | Failure => {
       "E_NO_REPORT",
       EXIT.BAD_ARGUMENTS,
       `Report not found: ${file ?? "(none given)"}`,
-      "Run tw2sx plan <path> first.",
+      "Run tw2stylex plan <path> first.",
     );
 
   const report = readReport(file);
@@ -359,8 +359,8 @@ const openReport = (args: Args): Report | Failure => {
     return fail(
       "E_BAD_REPORT",
       EXIT.BAD_ARGUMENTS,
-      `Not a tw2sx report: ${file}`,
-      "Regenerate it with tw2sx plan.",
+      `Not a tw2stylex report: ${file}`,
+      "Regenerate it with tw2stylex plan.",
     );
 
   return report;

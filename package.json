@@ -1,9 +1,9 @@
 {
-  "name": "tw2sx-repo",
+  "name": "tw2stylex-repo",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Monorepo for tw2sx, the agent-driven Tailwind to StyleX migration codemod.",
+  "description": "Monorepo for tw2stylex, the agent-driven Tailwind to StyleX migration codemod.",
   "license": "MIT",
   "repository": {
     "type": "git",

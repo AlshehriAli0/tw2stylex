@@ -71,7 +71,7 @@ describe("when our own output is wrong, we say so and convert nothing", () => {
   test("a compile error is reported as our bug, not as a class the user should fix", () => {
     const out = convert(uncompilable, "t", ["x"]);
     expect(out.skips.map(s => s.reason)).toEqual(["stylex-compile-error"]);
-    expect(out.skips[0]?.hint).toContain("tw2sx bug");
+    expect(out.skips[0]?.hint).toContain("tw2stylex bug");
   });
 
   test("a compile error still withholds the style", () => {

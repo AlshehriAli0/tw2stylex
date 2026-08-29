@@ -78,7 +78,7 @@ type Resolver = {
 };
 
 const makeResolver = (base: string): Resolver => {
-  const req = createRequire(path.join(base, "__tw2sx__.js"));
+  const req = createRequire(path.join(base, "__tw2stylex__.js"));
 
   const inNodeModules = (pkg: string): string | undefined => {
     for (const dir of req.resolve.paths(pkg) ?? []) {

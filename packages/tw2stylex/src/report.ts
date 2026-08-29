@@ -66,7 +66,7 @@ const mismatchSection = (report: Report, limit: number): string[] => {
   if (all.length === 0) return [green("MISMATCHES: 0")];
   return [
     bold(red(`MISMATCHES: ${all.length}`)) +
-      red(" - STOP: our StyleX does not match Tailwind. This is a tw2sx bug."),
+      red(" - STOP: our StyleX does not match Tailwind. This is a tw2stylex bug."),
     ...all.slice(0, limit).map(m => red(mismatchLine(m))),
   ];
 };
@@ -118,7 +118,7 @@ const nextStep = (skips: SkipLine[], reportPath: string | undefined): string[] =
   const next =
     first === undefined
       ? []
-      : [`${dim("Next:")} ${cyan(`tw2sx skipped ${reportPath} --fix ${first} --limit 20`)}`];
+      : [`${dim("Next:")} ${cyan(`tw2stylex skipped ${reportPath} --fix ${first} --limit 20`)}`];
   return ["", `${dim("Full report:")} ${reportPath}`, ...next];
 };
 

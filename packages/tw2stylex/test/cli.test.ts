@@ -24,7 +24,8 @@ describe("the CLI tells you how to use it before you get anything wrong", () => 
   test("help exits clean and lists every command", () => {
     const r = run("help");
     expect(r.code).toBe(EXIT.NOTHING_SKIPPED);
-    for (const c of ["explain", "plan", "skipped", "apply"]) expect(r.out).toContain(`tw2sx ${c}`);
+    for (const c of ["explain", "plan", "skipped", "apply"])
+      expect(r.out).toContain(`tw2stylex ${c}`);
   });
 
   test("no arguments prints the same help but exits 2, so a script notices", () => {
@@ -88,8 +89,8 @@ describe("exit codes are what a script should branch on", () => {
 
   test("without --json a failure is still readable prose with a code and a hint", () => {
     const r = run("skipped", "/no/such/report.json");
-    expect(r.err).toContain("tw2sx: Report not found");
-    expect(r.err).toContain("hint: Run tw2sx plan");
+    expect(r.err).toContain("tw2stylex: Report not found");
+    expect(r.err).toContain("hint: Run tw2stylex plan");
     expect(r.err).toContain("code: E_NO_REPORT");
   });
 });
@@ -106,16 +107,16 @@ describe("plan points at the skill", () => {
   };
 
   test("at init when the skill is not installed yet", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tw2sx-noskill-"));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tw2stylex-noskill-"));
     try {
-      expect(planIn(dir)).toContain("Skill: run tw2sx init");
+      expect(planIn(dir)).toContain("Skill: run tw2stylex init");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
   test("at the installed SKILL.md once it is", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tw2sx-skill-"));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tw2stylex-skill-"));
     try {
       fs.mkdirSync(path.join(dir, ".agents"));
       spawnSync("bun", [cli, "init"], { cwd: dir });

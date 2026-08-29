@@ -19,21 +19,21 @@ import { FIX_MEANING, FIXES, REASONS } from "./skip.ts";
 
 if (typeof enableCompileCache === "function") enableCompileCache();
 
-const HELP = `tw2sx - convert Tailwind to StyleX.
+const HELP = `tw2stylex - convert Tailwind to StyleX.
 
 Converts a usage only when it can prove the CSS comes out the same as Tailwind produced.
 Everything else it SKIPS and lists, with a reason and how to fix it.
 
 COMMANDS  (nothing writes unless you say --write)
-  tw2sx init                   Set this repo up for your agent. Writes to its agent dirs, or both if none.
-  tw2sx explain "<classes>"    Show the StyleX for a class string, and whether it checks out.
-  tw2sx plan <path>            Convert + check a folder. Writes a JSON report.
-  tw2sx skipped <report.json>  Re-read a report, filtered.
-  tw2sx apply <path> --write   WRITES CODE. Rewrites only what converted cleanly.
+  tw2stylex init                   Set this repo up for your agent. Writes to its agent dirs, or both if none.
+  tw2stylex explain "<classes>"    Show the StyleX for a class string, and whether it checks out.
+  tw2stylex plan <path>            Convert + check a folder. Writes a JSON report.
+  tw2stylex skipped <report.json>  Re-read a report, filtered.
+  tw2stylex apply <path> --write   WRITES CODE. Rewrites only what converted cleanly.
 
 A TYPICAL RUN
-  tw2sx plan src/components        # MISMATCHES must be 0; the skips are the work
-  tw2sx skipped .tw2sx/plan-*.json --fix safe
+  tw2stylex plan src/components        # MISMATCHES must be 0; the skips are the work
+  tw2stylex skipped .tw2stylex/plan-*.json --fix safe
   ...fix those, re-run plan, repeat until the skip count stops dropping
 
 OPTIONS
@@ -43,7 +43,7 @@ OPTIONS
   --limit <n>         How many skips to print (default 20). Use 0 for just the summary.
   --reason <r>        Show one reason only.
   --fix <f>           Show one fix type only.
-  --out <file>        Where to write the report (default .tw2sx/plan-<hash>.json).
+  --out <file>        Where to write the report (default .tw2stylex/plan-<hash>.json).
   --all               init only: write to every agent dir, not just the ones present.
   --stdin             explain only: one class string per line, answered in one run.
   --write             apply only: actually edit files. Without it, apply is a dry run.
@@ -61,7 +61,7 @@ Line and column numbers start at 1.`;
 const report = (result: CommandResult, json: boolean): number => {
   if (!isError(result)) return result.exit;
   if (json) console.error(JSON.stringify(result, null, 2));
-  else console.error(`tw2sx: ${result.message}\nhint: ${result.hint}\ncode: ${result.code}`);
+  else console.error(`tw2stylex: ${result.message}\nhint: ${result.hint}\ncode: ${result.code}`);
   return result.exit_code;
 };
 
@@ -84,7 +84,7 @@ const run = async (args: Args): Promise<CommandResult> => {
       "E_UNKNOWN_COMMAND",
       EXIT.BAD_ARGUMENTS,
       `Unknown command: ${name || "(none)"}`,
-      "Run tw2sx help.",
+      "Run tw2stylex help.",
     );
   return await command(args, readOutput(args));
 };
@@ -116,7 +116,7 @@ try {
         "E_INTERNAL",
         EXIT.OUR_BUG,
         message,
-        "This is a tw2sx bug. Re-run with --json and file the output.",
+        "This is a tw2stylex bug. Re-run with --json and file the output.",
       ),
       null,
       2,

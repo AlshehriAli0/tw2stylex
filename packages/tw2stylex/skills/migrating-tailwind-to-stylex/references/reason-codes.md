@@ -1,9 +1,9 @@
 # Reason codes
 
-Every usage `tw2sx` skips carries one of these. The list is closed — if you see a code that is
+Every usage `tw2stylex` skips carries one of these. The list is closed — if you see a code that is
 not here, the tool is newer than this file.
 
-Verify your fix by re-running `tw2sx plan <path>`. The skip should disappear and
+Verify your fix by re-running `tw2stylex plan <path>`. The skip should disappear and
 `MISMATCHES` must stay at 0.
 
 ---
@@ -66,7 +66,7 @@ named marker, or the style silently never applies. `anySibling`/`siblingAfter` c
 The element matches only under some ancestor — most often class-based dark mode, which
 compiles to `&:is(.dark *)`.
 
-**Dark mode:** pick the mechanism in [tokens.md](./tokens.md#dark-mode), then the component
+**Dark mode:** pick the mechanism under "Dark mode" in [tokens.md](./tokens.md), then the component
 references one token unconditionally and the pair of classes collapses into it.
 
 **Any other ancestor state:** `stylex.when.ancestor()` with a marker, as in `sibling-state`.
@@ -188,7 +188,7 @@ ignores falsy arguments:
 <div {...stylex.props(styles.base, isOpen && styles.open)} />
 ```
 
-`tw2sx` reports the classes it could see on both branches, so you usually have everything you
+`tw2stylex` reports the classes it could see on both branches, so you usually have everything you
 need. **Interpolated values** (`` `text-[${color}]` ``) need a dynamic style function instead:
 `highlight: (c) => ({ color: c })` — the body must be a bare object literal, not a block.
 
@@ -208,7 +208,7 @@ while unmigrated callers still pass strings. Full pattern in
 ## `component-class-name` — needs-lookup
 
 A `className` is applied to a custom component rather than a host element. Spreading
-`stylex.props()` onto the component would not style the DOM it renders, so `tw2sx` leaves the
+`stylex.props()` onto the component would not style the DOM it renders, so `tw2stylex` leaves the
 usage in place.
 
 Convert the component first, then replace `className` with a typed StyleX `style` prop that the
@@ -222,10 +222,10 @@ component passes to its host element. The full contract is in
 Tailwind itself does not recognise the class *in this project's design system*.
 
 Usually one of: a plain CSS class that was never Tailwind (leave it alone — it needs no
-migration); a class from a stylesheet `tw2sx` was not pointed at (pass `--css`); a missing
+migration); a class from a stylesheet `tw2stylex` was not pointed at (pass `--css`); a missing
 `@plugin`; or a typo that is already broken in production today.
 
-Check with `tw2sx explain "<class>"` before assuming, and leave anything you cannot confirm
+Check with `tw2stylex explain "<class>"` before assuming, and leave anything you cannot confirm
 exactly as it is — `text-red-500` and `text-red-600` are one character apart and visibly
 different, so a near-miss guess ships a design change.
 
@@ -268,7 +268,7 @@ A `--tw-*` slot survived resolution with no value and no `@property` initial val
 composes `box-shadow`, `filter`, `backdrop-filter` and `transform` from several classes at once;
 if the whole set is not present on the element, the value is genuinely incomplete.
 
-Resolve the element's full class set together and write one literal value. `tw2sx` already does
+Resolve the element's full class set together and write one literal value. `tw2stylex` already does
 this when it can — reaching this code usually means a class is applied conditionally elsewhere.
 
 ---
@@ -293,8 +293,8 @@ style, or restructure so the two styles do not both set that property.
 
 ## `variant-function` — safe
 
-A call to a `cva()`-produced function `tw2sx` could not resolve to its definition, usually
-because the definition sits in another file. Run `tw2sx plan` over the defining file too — the
+A call to a `cva()`-produced function `tw2stylex` could not resolve to its definition, usually
+because the definition sits in another file. Run `tw2stylex plan` over the defining file too — the
 converted styles are emitted there. Conversion recipe in
 [component-api.md](./component-api.md).
 
@@ -319,10 +319,10 @@ With it in hand, one of two applies:
 
 ## `stylex-compile-error` — unknown
 
-The StyleX we generated does not compile. **This is a tw2sx bug.** The detail carries the
+The StyleX we generated does not compile. **This is a tw2stylex bug.** The detail carries the
 compiler's own message.
 
 Two moves, both of them: convert that one usage by hand from the Tailwind classes, and report
 the class string that caused it. Working from the classes rather than from the broken output is
-the point — what tw2sx produced is wrong at the source, so a patch that makes it compile ships
+the point — what tw2stylex produced is wrong at the source, so a patch that makes it compile ships
 the wrong styles and hides the bug from the next person.

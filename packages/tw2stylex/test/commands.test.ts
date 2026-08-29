@@ -103,7 +103,7 @@ describe("explain answers about a class string without touching the disk", () =>
     const r = await run("explain");
     expect(codeOf(r.result)).toBe("E_NO_INPUT");
     expect(exitOf(r.result)).toBe(EXIT.BAD_ARGUMENTS);
-    expect(isError(r.result) && r.result.hint).toContain("tw2sx explain");
+    expect(isError(r.result) && r.result.hint).toContain("tw2stylex explain");
   });
 
   test("classes split across several arguments are read as one set", async () => {
@@ -140,7 +140,7 @@ describe("plan writes a report and says where it went", () => {
     const out = path.join(dir, "r1.json");
     const r = await run(`plan ${dir}/src --out ${out}`);
     expect(fs.existsSync(out)).toBe(true);
-    expect(record(json(fs.readFileSync(out, "utf8"))).tool).toBe("tw2sx");
+    expect(record(json(fs.readFileSync(out, "utf8"))).tool).toBe("tw2stylex");
     expect(r.out).toContain(`Full report: ${out}`);
   });
 
@@ -158,11 +158,11 @@ describe("plan writes a report and says where it went", () => {
 
   test("without --out the report still lands somewhere predictable", async () => {
     const cwd = process.cwd();
-    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "tw2sx-out-"));
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "tw2stylex-out-"));
     try {
       process.chdir(scratch);
       await run(`plan ${dir}/src/clean.tsx`);
-      const written = fs.readdirSync(path.join(scratch, ".tw2sx"));
+      const written = fs.readdirSync(path.join(scratch, ".tw2stylex"));
       expect(written.some(f => f.startsWith("plan-") && f.endsWith(".json"))).toBe(true);
     } finally {
       process.chdir(cwd);
@@ -246,7 +246,7 @@ describe("skipped re-reads a report without redoing the work", () => {
   test("a missing report names the file and tells you how to make one", async () => {
     const r = await run(`skipped ${dir}/nope.json`);
     expect(codeOf(r.result)).toBe("E_NO_REPORT");
-    expect(isError(r.result) && r.result.hint).toContain("tw2sx plan");
+    expect(isError(r.result) && r.result.hint).toContain("tw2stylex plan");
   });
 
   test("a JSON file that is not a report is a different error", async () => {
@@ -263,7 +263,7 @@ describe("apply is a dry run until told otherwise", () => {
     const before = fs.readFileSync(file, "utf8");
     const r = await run(`apply ${file}`);
     expect(r.out).toContain("DRY RUN");
-    expect(r.out).toContain("Next: tw2sx apply");
+    expect(r.out).toContain("Next: tw2stylex apply");
     expect(fs.readFileSync(file, "utf8")).toBe(before);
   });
 
@@ -372,7 +372,7 @@ describe("apply --write refuses to run on a dirty tree", () => {
 
 describe("entry css discovery fails loudly rather than guessing", () => {
   test("no Tailwind entry anywhere up the tree is a precondition error", async () => {
-    const bare = fs.mkdtempSync(path.join(os.tmpdir(), "tw2sx-bare-"));
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), "tw2stylex-bare-"));
     try {
       fs.writeFileSync(
         path.join(bare, "a.tsx"),

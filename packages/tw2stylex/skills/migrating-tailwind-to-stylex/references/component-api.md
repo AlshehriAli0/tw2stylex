@@ -79,7 +79,7 @@ For **compound variants**, StyleX's docs say to pre-flatten the combination into
 style (`colorVariantsDisabled`) and select it, rather than layering a second style over
 the first. Layering is what wipes the conditions.
 
-`tw2sx` converts cva mechanically and names styles from the axis and value.
+`tw2stylex` converts cva mechanically and names styles from the axis and value.
 
 ### Branch on the variant
 

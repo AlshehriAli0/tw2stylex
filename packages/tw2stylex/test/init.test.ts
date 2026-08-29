@@ -23,7 +23,7 @@ const entry = (home: string): string =>
   fs.readFileSync(path.join(skillDir(home), "SKILL.md"), "utf8");
 
 beforeEach(() => {
-  project = fs.mkdtempSync(path.join(os.tmpdir(), "tw2sx-init-"));
+  project = fs.mkdtempSync(path.join(os.tmpdir(), "tw2stylex-init-"));
 });
 
 afterEach(() => {
@@ -88,7 +88,7 @@ describe("what it writes", () => {
     install();
     const block = /^---\n([\s\S]*?)\n---\n/.exec(entry(".claude"))?.[1];
     expect(block).toContain(`name: ${skillName()}`);
-    expect(block).toContain("package: tw2sx");
+    expect(block).toContain("package: tw2stylex");
   });
 
   test("one stamp, however many times it runs", () => {
@@ -118,23 +118,23 @@ describe("the report directory is ignored", () => {
 
   test("a .gitignore is created when there is none", () => {
     ignoreReports(project);
-    expect(ignore()).toBe(".tw2sx/\n");
+    expect(ignore()).toBe(".tw2stylex/\n");
   });
 
   test("an existing .gitignore gains one line, on its own line", () => {
     fs.writeFileSync(path.join(project, ".gitignore"), "node_modules");
     ignoreReports(project);
-    expect(ignore()).toBe("node_modules\n.tw2sx/\n");
+    expect(ignore()).toBe("node_modules\n.tw2stylex/\n");
   });
 
   test("already ignored means untouched", () => {
-    fs.writeFileSync(path.join(project, ".gitignore"), ".tw2sx\n");
+    fs.writeFileSync(path.join(project, ".gitignore"), ".tw2stylex\n");
     ignoreReports(project);
-    expect(ignore()).toBe(".tw2sx\n");
+    expect(ignore()).toBe(".tw2stylex\n");
   });
 });
 
-describe("tw2sx --version", () => {
+describe("tw2stylex --version", () => {
   test("reports the published version, not a placeholder", () => {
     expect(version()).toMatch(/^\d+\.\d+\.\d+/);
   });

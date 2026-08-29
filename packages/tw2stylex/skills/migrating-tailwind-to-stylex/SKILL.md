@@ -1,15 +1,15 @@
 ---
 name: migrating-tailwind-to-stylex
 description: >-
-  Migrates Tailwind to StyleX with the tw2sx CLI, then hand-resolves what it skips. Read in
-  full before the first tw2sx command. Use when moving code off Tailwind, when a tw2sx report
+  Migrates Tailwind to StyleX with the tw2stylex CLI, then hand-resolves what it skips. Read in
+  full before the first tw2stylex command. Use when moving code off Tailwind, when a tw2stylex report
   or skip is in front of you, when installing StyleX into a build, or when writing StyleX
   styles by hand.
 ---
 
 # Migrating Tailwind to StyleX
 
-`tw2sx` resolves each Tailwind class through the project's own compiler and converts it only
+`tw2stylex` resolves each Tailwind class through the project's own compiler and converts it only
 when it can prove the CSS declarations come out identical. What it cannot prove, it **skips**
 and reports. The skips are your work.
 
@@ -17,9 +17,9 @@ Pixels stay identical.
 
 ## The loop
 
-- [ ] 0. `tw2sx init` — installs this skill into the project. Run it when the `version` in this
-      file's frontmatter differs from `tw2sx --version`: the copy you are reading came from an
-      older tw2sx and may name reasons or a fix order the tool no longer uses.
+- [ ] 0. `tw2stylex init` — installs this skill into the project. Run it when the `version` in this
+      file's frontmatter differs from `tw2stylex --version`: the copy you are reading came from an
+      older tw2stylex and may name reasons or a fix order the tool no longer uses.
 - [ ] 1. Read three pages to their last line, once per project, before any other step:
       [Thinking in StyleX](https://stylexjs.com/docs/learn/thinking-in-stylex), and Facebook's
       two files written for agents —
@@ -32,13 +32,13 @@ Pixels stay identical.
 - [ ] 3. Tokens and shared primitives in place before any component converts —
       [tokens.md](references/tokens.md). Every component references them, so converting first
       means converting twice.
-- [ ] 4. `tw2sx plan <path>` — writes a report, edits nothing.
+- [ ] 4. `tw2stylex plan <path>` — writes a report, edits nothing.
 - [ ] 5. Read `MISMATCHES`. **At 0, continue. Above 0, stop and tell the user** —
-      the tool generated StyleX that does not match Tailwind, which is a tw2sx bug.
+      the tool generated StyleX that does not match Tailwind, which is a tw2stylex bug.
 - [ ] 6. Fix skips in fix order: every `safe`, then every `needs-lookup`, then every
       `check-first`, then every `unknown` — each by its recipe in
       [reason-codes.md](references/reason-codes.md), read before the first skip of that reason.
-- [ ] 7. `tw2sx plan <path>` again. Continue only when the skip count dropped and mismatches
+- [ ] 7. `tw2stylex plan <path>` again. Continue only when the skip count dropped and mismatches
       are still 0.
 - [ ] 8. Repeat from 6 until every remaining skip is one you can name a reason for keeping.
 - [ ] 9. Run the project's own typecheck and build. Both clean.
@@ -48,18 +48,17 @@ Pixels stay identical.
       zero, or every difference is one you can name.
 - [ ] 11. Summarise: usages converted, skips resolved, and each skip you kept with why.
 
-`tw2sx explain "<classes>"` prints the exact StyleX object for any class string and whether it
+`tw2stylex explain "<classes>"` prints the exact StyleX object for any class string and whether it
 verified. Reach for it whenever you are about to write a value from memory; `--stdin` answers
 one class string per line in a single run. The answer is Tailwind's alone: a rule the project
 wrote itself against the same class name is not in it, so grep for `.the-class` first.
 
-`tw2sx` is the binary `tw2stylex` installs. When the shell cannot find it, run
-`npx tw2stylex <command>` from the project root.
+When the shell cannot find `tw2stylex`, run `npx tw2stylex <command>` from the project root.
 
 Migrate **leaves first** — a component only after the components it renders. A StyleX child
 inside a Tailwind parent is where cascade surprises live.
 
-Watch the total, not only the skips. `tw2sx plan` over the whole source tree gives one usage
+Watch the total, not only the skips. `tw2stylex plan` over the whole source tree gives one usage
 count; if it rises between sessions, Tailwind is still being written faster than you remove it.
 
 ## Finishing
@@ -73,12 +72,12 @@ Then take the scaffolding back out:
       callers could reach in. A `style` prop typed with `StyleXStylesWithout` stays.
 - [ ] Keep Tailwind's base output — preflight and the theme variables — as a plain CSS file
       before deleting Tailwind. Without it the layout falls back to browser defaults —
-      [setup.md](references/setup.md#leaving-tailwind).
+      "Leaving Tailwind" in [setup.md](references/setup.md).
 - [ ] Decide `useCSSLayers` by the rule in [setup.md](references/setup.md): that kept file is
       unlayered CSS.
 - [ ] `grep -rn "var(--" src`: each variable it finds is a project token. Done when every one
       is defined outside Tailwind's `@theme` — [tokens.md](references/tokens.md).
-- [ ] Remove `tailwindcss`, its entry CSS, and `tw2sx` from the project.
+- [ ] Remove `tailwindcss`, its entry CSS, and `tw2stylex` from the project.
 
 ## Reading a skip
 
@@ -95,7 +94,7 @@ src/ui/Card.tsx:41:18: skipped descendant-selector "[&_svg]:size-4": … fix: St
 | `check-first` | A rewrite exists but shifts behaviour at the edges. Read the surrounding code first. |
 | `unknown` | Investigate. Often not a Tailwind class at all. |
 
-Filter with `tw2sx skipped <report.json> --reason <r> --fix <a>`.
+Filter with `tw2stylex skipped <report.json> --reason <r> --fix <a>`.
 
 ## Silent failure is the house style
 
@@ -122,7 +121,7 @@ the longhands to write. These stay whole: `margin`, `padding`, `inset`, `flex`, 
 
 **A shorthand carrying a condition loses to a longhand of the same box.** StyleX gives
 longhands ID-level specificity, so `paddingTop` beats `padding` under `:hover`, the reverse of
-Tailwind. `tw2sx` catches this as `shorthand-beaten-by-longhand` rather than converting it, but
+Tailwind. `tw2stylex` catches this as `shorthand-beaten-by-longhand` rather than converting it, but
 the same trap is yours to avoid in anything you write by hand.
 
 **There is no `!important`.** `stylex.props()` argument order is the precedence rule: later wins.

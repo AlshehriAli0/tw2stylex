@@ -134,7 +134,7 @@ export const readClasses = (node: t.Node): Reader => {
       skips.push({
         reason: "variant-function",
         detail: `${name}() looks like a cva() variant function defined in another file.`,
-        hint: `Run tw2sx plan over the file that defines ${name} as well - its styles are converted there.`,
+        hint: `Run tw2stylex plan over the file that defines ${name} as well - its styles are converted there.`,
       });
       return [];
     }
