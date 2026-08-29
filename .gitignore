@@ -6,3 +6,4 @@ codedb.snapshot
 # Local research. Kept on disk, never committed.
 CONTEXT.md
 docs/
+*.tgz
