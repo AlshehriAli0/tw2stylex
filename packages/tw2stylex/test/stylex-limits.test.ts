@@ -90,4 +90,27 @@ describe("the failures the skill calls silent are the ones that are silent", () 
     );
     expect("error" in r).toBe(false);
   });
+
+  test("finite variant branches fold props calls without changing CSS", () => {
+    const definitions = `const styles = stylex.create({
+      base: { display: 'flex' },
+      neutral: { color: 'black' },
+      danger: { color: 'white' },
+    });`;
+    const dynamic = compileStyleX(`${definitions}
+      const variants = { neutral: styles.neutral, danger: styles.danger };
+      const propsFor = tone => stylex.props(styles.base, variants[tone]);`);
+    const finite = compileStyleX(`${definitions}
+      const propsFor = tone => tone === 'neutral'
+        ? stylex.props(styles.base, styles.neutral)
+        : stylex.props(styles.base, styles.danger);`);
+
+    expect("error" in dynamic).toBe(false);
+    expect("error" in finite).toBe(false);
+    if ("error" in dynamic || "error" in finite) return;
+
+    expect(dynamic.rules).toEqual(finite.rules);
+    expect(dynamic.code).toContain("stylex.props");
+    expect(finite.code).not.toContain("stylex.props");
+  });
 });

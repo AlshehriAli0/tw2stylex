@@ -84,16 +84,19 @@ const babelOptions = once((): TransformOptions => ({
   ],
 }));
 
-export const compileStyleX = (source: string): { rules: CompiledRule[] } | { error: string } => {
+export const compileStyleX = (
+  source: string,
+): { rules: CompiledRule[]; code: string } | { error: string } => {
   const code = `import * as stylex from '@stylexjs/stylex';\n${source}\nexport { styles };\n`;
   try {
     const res = babelTransform()(code, babelOptions());
+    if (typeof res?.code !== "string") throw new Error("StyleX compiler emitted no code.");
     const rules = readMeta(res?.metadata).map(([className, rule, priority]) => ({
       className,
       css: rule.ltr,
       priority,
     }));
-    return { rules };
+    return { rules, code: res.code };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
