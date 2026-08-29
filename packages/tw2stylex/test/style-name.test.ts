@@ -129,12 +129,14 @@ describe("the style object avoids names the file already uses", () => {
   // A component with a `styles` prop shadows a module-level `const styles`, so
   // `stylex.props(styles.el1)` reads the prop and every style silently vanishes.
   test("a file that already binds styles gets a different one", () => {
-    expect(nameFor(`export const C = ({ styles }) => <div />;`)).toBe("tw2sxStyles");
+    expect(nameFor(`export const C = ({ styles }) => <div />;`)).toBe("tw2stylexStyles");
   });
 
   test("both taken keeps counting", () => {
-    expect(nameFor(`const styles = 1; const tw2sxStyles = 2;`)).toBe("tw2sxStyles2");
-    expect(nameFor(`const styles = 1, tw2sxStyles = 2, tw2sxStyles2 = 3;`)).toBe("tw2sxStyles3");
+    expect(nameFor(`const styles = 1; const tw2stylexStyles = 2;`)).toBe("tw2stylexStyles2");
+    expect(nameFor(`const styles = 1, tw2stylexStyles = 2, tw2stylexStyles2 = 3;`)).toBe(
+      "tw2stylexStyles3",
+    );
   });
 
   test("a longer name that merely contains the candidate does not count as a clash", () => {

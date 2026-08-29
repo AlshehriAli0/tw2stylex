@@ -4,7 +4,7 @@ TypeScript CLI codemod. No React, no JSX. Bun for running and testing, `tsc` for
 
 ## Layout
 
-A bun workspace. The published package is `packages/tw2stylex` (`tw2stylex` on npm, `tw2sx` on the
+A bun workspace. The published package is `packages/tw2stylex` (`tw2stylex` on npm and on the
 command line) and holds `src`, `test` and `skills`.
 The root is private and holds the README, `assets/`, the shared lint and format config, and
 `scripts/`. Run every command from the root; `bun run check` covers the whole workspace.

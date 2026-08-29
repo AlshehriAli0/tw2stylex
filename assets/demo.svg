@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="586" height="382" viewBox="0 0 586 382">
 <rect width="586" height="382" rx="8" fill="#0d1117"/>
 <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="13.5" fill="#c9d1d9">
-<text y="39"><tspan x="20.0" fill="#c9d1d9">$ tw2sx plan app</tspan></text>
+<text y="39"><tspan x="20.0" fill="#c9d1d9">$ tw2stylex plan app</tspan></text>
 <text y="58"><tspan x="20.0" font-weight="600" fill="#c9d1d9">21</tspan><tspan x="36.8" fill="#c9d1d9"> files · </tspan><tspan x="112.4" font-weight="600" fill="#c9d1d9">69</tspan><tspan x="129.2" fill="#c9d1d9"> usages · </tspan><tspan x="213.2" font-weight="600" fill="#4ade80">23</tspan><tspan x="230.0" fill="#c9d1d9"> converted · </tspan><tspan x="339.2" font-weight="600" fill="#fbbf24">46</tspan><tspan x="356.0" fill="#c9d1d9"> skipped</tspan><tspan x="423.2" opacity="0.55" fill="#c9d1d9"> · 216ms</tspan></text>
 <text y="77"><tspan x="20.0" fill="#4ade80">MISMATCHES: 0</tspan></text>
 <text y="96"></text>
@@ -17,6 +17,6 @@
 <text y="286"><tspan x="20.0" fill="#c9d1d9">    </tspan><tspan x="53.6" opacity="0.55" fill="#c9d1d9">styles-children       </tspan><tspan x="238.4" fill="#c9d1d9"> </tspan><tspan x="246.8" font-weight="600" fill="#c9d1d9">   4</tspan></text>
 <text y="305"><tspan x="20.0" fill="#c9d1d9">    </tspan><tspan x="53.6" opacity="0.55" fill="#c9d1d9">passed-in-classes     </tspan><tspan x="238.4" fill="#c9d1d9"> </tspan><tspan x="246.8" font-weight="600" fill="#c9d1d9">   2</tspan></text>
 <text y="324"></text>
-<text y="343"><tspan x="20.0" opacity="0.55" fill="#c9d1d9">Full report:</tspan><tspan x="120.8" fill="#c9d1d9"> .tw2sx/plan-3d35e4.json</tspan></text>
-<text y="362"><tspan x="20.0" opacity="0.55" fill="#c9d1d9">Next:</tspan><tspan x="62.0" fill="#c9d1d9"> </tspan><tspan x="70.4" fill="#22d3ee">tw2sx skipped .tw2sx/plan-3d35e4.json --fix safe --limit 20</tspan></text>
+<text y="343"><tspan x="20.0" opacity="0.55" fill="#c9d1d9">Full report:</tspan><tspan x="120.8" fill="#c9d1d9"> .tw2stylex/plan-3d35e4.json</tspan></text>
+<text y="362"><tspan x="20.0" opacity="0.55" fill="#c9d1d9">Next:</tspan><tspan x="62.0" fill="#c9d1d9"> </tspan><tspan x="70.4" fill="#22d3ee">tw2stylex skipped .tw2stylex/plan-3d35e4.json --fix safe --limit 20</tspan></text>
 </g></svg>

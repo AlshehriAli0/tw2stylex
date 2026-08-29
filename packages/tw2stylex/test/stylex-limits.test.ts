@@ -25,7 +25,7 @@ const SHORTHAND_VALUE: Record<string, string> = { all: "unset", animation: "a 1s
 
 describe("the banned-shorthand list matches what StyleX actually rejects", () => {
   // This list drifted once already: border-block-start and border-block-end were missing, so
-  // they reached the compiler and came back as `stylex-compile-error` - "this is a tw2sx bug" -
+  // they reached the compiler and came back as `stylex-compile-error` - "this is a tw2stylex bug" -
   // when the real answer was a longhand rewrite the agent could have done.
   test.each([...BANNED_SHORTHANDS])("%s is rejected by StyleX", prop => {
     const r = compileProp(prop, SHORTHAND_VALUE[prop] ?? "1px solid red");

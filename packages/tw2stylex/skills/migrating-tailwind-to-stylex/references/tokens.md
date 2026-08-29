@@ -14,7 +14,7 @@ Often not. If the project's `@theme` is already a thin alias over hand-written C
 :root { --background: 250 250 250; }
 ```
 
-then `tw2sx` emits `backgroundColor: 'rgb(var(--background))'`, which is a perfectly valid
+then `tw2stylex` emits `backgroundColor: 'rgb(var(--background))'`, which is a perfectly valid
 StyleX value referencing a variable StyleX does not own. Runtime theming — tenant themes, a
 `.dark` class toggle, anything that rewrites those variables — **keeps working untouched**.
 
@@ -27,7 +27,7 @@ Tailwind 4 utilities read the default theme through variables: `p-4` is
 `calc(var(--spacing) * 4)`, `text-sm` is `var(--text-sm)`. Those variables come from Tailwind's
 `theme.css`, so deleting `@import "tailwindcss"` deletes them too.
 
-`tw2sx` inlines every default Tailwind ships that the project has not overridden: `p-4` becomes
+`tw2stylex` inlines every default Tailwind ships that the project has not overridden: `p-4` becomes
 `padding: '1rem'`, `text-red-500` becomes its `oklch(…)` literal. Whatever is still a `var(--…)`
 in the output is yours — a token from the project's `@theme`, an override of a Tailwind default,
 or a runtime variable behind an `@theme inline` alias. Before removing Tailwind, each of those

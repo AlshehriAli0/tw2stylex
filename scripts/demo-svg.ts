@@ -1,6 +1,6 @@
 /**
  * Renders coloured CLI output to assets/demo.svg, so the README shows what the terminal shows.
- * Usage: FORCE_COLOR=1 tw2sx plan app | bun run scripts/demo-svg.ts > assets/demo.svg
+ * Usage: FORCE_COLOR=1 tw2stylex plan app | bun run scripts/demo-svg.ts > assets/demo.svg
  */
 const ESC = String.fromCharCode(27);
 const SGR = new RegExp(`${ESC}\\[(\\d+)m`, "g");

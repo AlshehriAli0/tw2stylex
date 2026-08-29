@@ -15,7 +15,7 @@ const tailwind3Root = path.dirname(
 const made: string[] = [];
 
 const projectWithTailwind3Installed = (files: Record<string, string>): string => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tw2sx-v3-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tw2stylex-v3-"));
   made.push(dir);
   for (const [rel, content] of Object.entries(files)) {
     const file = path.join(dir, rel);

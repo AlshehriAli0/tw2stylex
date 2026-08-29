@@ -87,7 +87,7 @@ export const plan = async (entryCss: string, files: string[]): Promise<Report> =
 
   return {
     ok: results.every(r => r.mismatches.length === 0),
-    tool: "tw2sx",
+    tool: "tw2stylex",
     tailwind: sys.version,
     entry: sys.entry,
     summary: {

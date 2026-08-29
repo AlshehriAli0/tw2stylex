@@ -69,7 +69,7 @@ export const loadV3 = (
 
   const projectCss = parseCss(entryCss);
   const context = createContext(resolveConfig(loadConfig(configPath)), [], projectCss);
-  if (!isContext(context)) throw new Error(`${source} gave a context tw2sx cannot read.`);
+  if (!isContext(context)) throw new Error(`${source} gave a context tw2stylex cannot read.`);
   const expandApplyIn = asCompiler(expandApply(context), "expandApplyAtRules(context)", source);
 
   const cssFor = (candidate: string): string | null => {
