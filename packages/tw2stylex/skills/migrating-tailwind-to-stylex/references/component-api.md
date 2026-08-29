@@ -70,7 +70,7 @@ lookup. There is no `stylex.variants()` API.
 | cva | StyleX |
 |---|---|
 | `base` string | a `base` style, first argument to `stylex.props` |
-| `variants.axis.value` | a style, selected by `variants[axis]` |
+| `variants.axis.value` | a style selected from the same finite axis |
 | `defaultVariants` | JS default parameter values |
 | `VariantProps<typeof x>` | `keyof typeof variants` |
 | `props.className` (last) | the `style` prop, last |
@@ -81,6 +81,25 @@ the first. Layering is what wipes the conditions.
 
 `tw2sx` converts cva mechanically and names styles from the axis and value. Plain JSX usages
 get `el1`, `el2` placeholders — rename those to what the element is while you review the file.
+
+### Let closed variants compile away
+
+When every variant is known and the component has no caller `style` or other runtime style,
+branch on the finite union at the `stylex.props` calls:
+
+```tsx
+const variantProps = variant === 'ghost'
+  ? stylex.props(styles.base, variants.ghost)
+  : stylex.props(styles.base, variants.default);
+
+return <button {...props} {...variantProps} />;
+```
+
+Do not hide that choice behind `variants[variant]`. The lookup prevents the StyleX compiler
+from folding the props call and keeps its runtime style objects in client JavaScript. For three
+or more values, use an exhaustive switch with one direct `stylex.props` call per branch. When a
+caller `style` prop is genuinely dynamic, the runtime path is already required; keep the lookup
+if it is clearer.
 
 ## Advertise only what you apply
 
