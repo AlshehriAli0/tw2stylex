@@ -3,6 +3,12 @@
 Agent-driven Tailwind to StyleX migration. Converts what it can prove, and turns the rest into
 work an agent can pick up.
 
+<p>
+  <a href="https://www.npmjs.com/package/tw2stylex"><img src="https://img.shields.io/npm/v/tw2stylex" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/tw2stylex"><img src="https://img.shields.io/npm/dm/tw2stylex" alt="npm downloads" /></a>
+  <a href="https://github.com/AlshehriAli0/tw2stylex/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/tw2stylex" alt="license" /></a>
+</p>
+
 <img src="assets/demo.svg" alt="tw2sx plan output" width="750">
 
 No codemod finishes this job. tw2sx converts only what it can verify against the real StyleX
