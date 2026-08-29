@@ -148,11 +148,6 @@ const fillVars = (value: string, resolve: ResolveVar, depth = 0): string => {
   return value.slice(0, at) + filled + fillVars(value.slice(close + 1), resolve, depth);
 };
 
-const varResolver =
-  (ds: DesignSystem, slots: Map<string, string>): ResolveVar =>
-  (name, fallback) =>
-    name.startsWith("--tw-") ? (slots.get(name) ?? fallback) : ds.themeDefault(name);
-
 const SCALED_LENGTH = /calc\((-?[\d.]+)([a-z%]*) \* (-?[\d.]+)\)/g;
 
 const foldScaledLengths = (value: string): string =>
@@ -313,7 +308,9 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
   const declarations: ResolvedClasses["declarations"] = new Map();
   const known = inTailwindOrder(ds, classNames, skips);
   const roots = parsedCssFor(ds, known);
-  const resolveVar = varResolver(ds, twSlots(ds, roots));
+  const slots = twSlots(ds, roots);
+  const resolveVar: ResolveVar = (name, fallback) =>
+    name.startsWith("--tw-") ? (slots.get(name) ?? fallback) : ds.themeDefault(name);
 
   const setBy = new Map<string, string>();
 

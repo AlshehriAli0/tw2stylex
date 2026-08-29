@@ -14,10 +14,9 @@ type Theme = {
 type Compiled = {
   candidatesToCss: (classes: string[]) => Array<string | null>;
   getClassOrder: (classes: string[]) => Array<[string, bigint | null]>;
-  theme: Theme;
 };
 
-export type DesignSystem = Omit<Compiled, "theme"> & {
+export type DesignSystem = Compiled & {
   slotDefaults: Map<string, string>;
   themeDefault: (variable: string) => string | undefined;
 };
@@ -161,7 +160,7 @@ type LoadDesignSystemFn = (
       kind: string,
     ) => Promise<{ path: string; base: string; module: unknown }>;
   },
-) => Promise<Compiled>;
+) => Promise<Compiled & { theme: Theme }>;
 
 const isLoadDesignSystem = (v: unknown): v is LoadDesignSystemFn => typeof v === "function";
 
