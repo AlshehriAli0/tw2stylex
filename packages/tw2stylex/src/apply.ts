@@ -67,7 +67,7 @@ export const applyScanned = (
   if (hasStyleX && styleXNamespace === undefined)
     return { file, written: false, rewritten: 0, skipped: usages.length, reason: "already-stylex" };
 
-  const styleX = styleXNamespace ?? "stylex";
+  const stylex = styleXNamespace ?? "stylex";
   const objectName = styleObjectName(nameIsTaken(code));
   const edits = new MagicString(code);
   const styles: Record<string, Style> = {};
@@ -86,7 +86,7 @@ export const applyScanned = (
       return;
     }
     styles[name] = result.style;
-    edits.update(range[0], range[1], `{...${styleX}.props(${objectName}.${name})}`);
+    edits.update(range[0], range[1], `{...${stylex}.props(${objectName}.${name})}`);
     rewritten += 1;
   });
 
@@ -94,7 +94,7 @@ export const applyScanned = (
     return { file, written: false, rewritten: 0, skipped, reason: "nothing-convertible" };
 
   if (!hasStyleX) edits.prepend(`import * as stylex from '@stylexjs/stylex';\n`);
-  edits.append(`\n\n${printCreate(styles, objectName, styleX)}\n`);
+  edits.append(`\n\n${printCreate(styles, objectName, stylex)}\n`);
   const next = edits.toString();
 
   if (write) writeViaTempFile(file, next);

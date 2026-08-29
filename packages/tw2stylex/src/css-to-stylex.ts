@@ -89,12 +89,12 @@ const printObject = (obj: ConditionTree | Style, indent: number): string => {
 export const printCreate = (
   styleMap: Record<string, Style>,
   varName = "styles",
-  styleXNamespace = "stylex",
+  stylex = "stylex",
 ): string => {
   const body = Object.entries(styleMap)
     .map(([name, style]) => `  ${key(name)}: ${printObject(style, 2)},`)
     .join("\n");
-  return `const ${varName} = ${styleXNamespace}.create({\n${body}\n});`;
+  return `const ${varName} = ${stylex}.create({\n${body}\n});`;
 };
 
 export type Declaration = { property: string; conditions: string[]; value: string | number | null };

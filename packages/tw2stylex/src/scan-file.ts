@@ -291,12 +291,12 @@ export const scanFile = (code: string, filename: string): ScanResult => {
   };
 
   const readImport = (declaration: t.ImportDeclaration): void => {
-    if (!declaration.source.value.startsWith("@stylexjs/")) return;
+    const from = declaration.source.value;
+    if (!from.startsWith("@stylexjs/")) return;
     hasStyleX = true;
-    if (declaration.source.value !== "@stylexjs/stylex" || declaration.importKind === "type")
-      return;
     const namespace = declaration.specifiers.find(t.isImportNamespaceSpecifier);
-    if (namespace) styleXNamespace = namespace.local.name;
+    if (namespace && from === "@stylexjs/stylex" && declaration.importKind !== "type")
+      styleXNamespace = namespace.local.name;
   };
 
   t.traverseFast(ast, node => {
