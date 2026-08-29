@@ -1,7 +1,7 @@
 {
   "name": "tw2sx",
   "version": "0.1.0",
-  "description": "Tailwind to StyleX migration codemod. Converts what it can prove, reports what it can't.",
+  "description": "Agent-driven Tailwind to StyleX migration codemod. Converts what it can prove, reports what it can't.",
   "license": "MIT",
   "type": "module",
   "bin": {

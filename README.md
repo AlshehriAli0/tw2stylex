@@ -1,44 +1,19 @@
 # tw2sx
 
-Migrate Tailwind to StyleX. Converts what it can prove, reports what it can't.
+Agent-driven Tailwind to StyleX migration. Converts what it can prove, and turns the rest into
+work an agent can pick up.
 
-```
-$ tw2sx plan app
-21 files · 69 usages · 23 converted · 46 skipped
-MISMATCHES: 0
+<img src="https://raw.githubusercontent.com/AlshehriAli0/tailwind-2-stylex/main/assets/demo.svg" alt="tw2sx plan output" width="586">
 
-app/contact/page.tsx:53:12: skipped parent-state "dark:text-slate-300": … fix: For dark mode
-use stylex.createTheme(); otherwise stylex.when.ancestor() with a marker.
-
-Showing 1 of 74 skipped.
-
-Skipped, in the order to work them:
-  safe
-    marker-class              7
-  needs-lookup
-    parent-state             39
-    descendant-selector       7
-    sibling-state             7
-  check-first
-    dynamic-classes           8
-    styles-children           4
-    passed-in-classes         2
-
-Full report: .tw2sx/plan-3d35e4.json
-Next: tw2sx skipped .tw2sx/plan-3d35e4.json --fix safe --limit 20
-```
-
-Every conversion gets compiled through the real StyleX Babel plugin, and its declarations
-checked against the ones Tailwind produced. That is what `MISMATCHES: 0` means.
-
-Tailwind and StyleX do not map onto each other cleanly, so a lot will not convert. Those get
-skipped and listed, each with a reason and a way to fix it by hand.
+No codemod finishes this job. tw2sx converts only what it can verify against the real StyleX
+compiler, which is what `MISMATCHES: 0` means, and reports the rest as typed skips.
+`tw2sx init` sets the repo up so your agent can work through them.
 
 ## Install
 
 ```bash
 npm i -D tw2sx     # bun add -d tw2sx · pnpm add -D tw2sx
-npx tw2sx init     # installs the agent skill
+npx tw2sx init     # sets the repo up for your agent
 ```
 
 ## The loop
@@ -55,7 +30,7 @@ report never promises something `apply` will skip.
 
 | | |
 |---|---|
-| `tw2sx init` | Install the agent skill. Safe to re-run. |
+| `tw2sx init` | Set the repo up for your agent. Safe to re-run. |
 | `tw2sx explain "<classes>"` | Resolve a class string to a StyleX object. Touches nothing. |
 | `tw2sx plan <path>` | Scan, convert, verify. Writes a JSON report. **Never edits code.** |
 | `tw2sx apply <path>` | Rewrite the sites that convert cleanly. Dry run unless `--write`. |
@@ -77,8 +52,8 @@ tokens and dark mode.
 
 ## For agents
 
-`tw2sx init` copies [SKILL.md] into `.claude/skills` or `.agents/skills`, whichever the project
-already has. The main thing it teaches is this failure, which StyleX gives you no warning about:
+The skill goes into `.claude/skills` or `.agents/skills`, whichever the project already has.
+The main thing it teaches is this failure, which StyleX gives you no warning about:
 
 ```js
 base:    { backgroundColor: { default: 'X', ':hover': 'Y' } }
@@ -102,7 +77,7 @@ Exit codes: `0` clean · `1` finished with skips · `2` usage · `3` preconditio
 `tw2sx help` has the flags.
 
 Run against a production Tailwind app: 970 files, 7,125 usages, 5,509 converted, zero
-mismatches, 0.7s. Node and Bun produce identical output.
+mismatches, 809ms. Node and Bun produce identical output.
 
 [SKILL.md]: skills/migrating-tailwind-to-stylex/SKILL.md
 [reason-codes.md]: skills/migrating-tailwind-to-stylex/references/reason-codes.md

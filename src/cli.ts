@@ -25,7 +25,7 @@ Converts a usage only when it can prove the CSS comes out the same as Tailwind p
 Everything else it SKIPS and lists, with a reason and how to fix it.
 
 COMMANDS  (nothing writes unless you say --write)
-  tw2sx init                   Install the agent skill into the agent dirs this project has.
+  tw2sx init                   Set this repo up for your agent. Writes to the agent dirs it has.
   tw2sx explain "<classes>"    Show the StyleX for a class string, and whether it checks out.
   tw2sx plan <path>            Convert + check a folder. Writes a JSON report.
   tw2sx skipped <report.json>  Re-read a report, filtered.
