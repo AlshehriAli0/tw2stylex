@@ -1,6 +1,6 @@
 {
   "name": "tw2stylex",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Agent-driven Tailwind to StyleX migration codemod. Converts what it can prove, reports what it can't.",
   "keywords": [
     "tailwind",
