@@ -66,25 +66,10 @@ named marker, or the style silently never applies. `anySibling`/`siblingAfter` c
 The element matches only under some ancestor — most often class-based dark mode, which
 compiles to `&:is(.dark *)`.
 
-**For dark mode, reach for theming** — it is the mechanism built for exactly this:
+**Dark mode:** pick the mechanism in [tokens.md](./tokens.md#dark-mode), then the component
+references one token unconditionally and the pair of classes collapses into it.
 
-```ts
-// tokens.stylex.ts
-export const colors = stylex.defineVars({ text: 'black', surface: 'white' });
-export const darkTheme = stylex.createTheme(colors, { text: 'white', surface: '#111' });
-```
-
-Apply `darkTheme` on the element that currently has `.dark`. Components then reference
-`colors.text` unconditionally and dark mode just works.
-
-If the project's tokens are already runtime CSS variables (e.g. `rgb(var(--primary))` from an
-`@theme inline` block), you often need **no migration at all** — point `defineVars` at the same
-variables and the existing runtime theming keeps working untouched.
-
-For non-theme ancestor state, use `stylex.when.ancestor()` with a marker as above.
-
-[tokens.md](./tokens.md) has the full dark-mode decision — `light-dark()` is usually simpler
-than `createTheme`.
+**Any other ancestor state:** `stylex.when.ancestor()` with a marker, as in `sibling-state`.
 
 ---
 
@@ -126,6 +111,8 @@ with `hidden` children, the two differ visibly. Check the parent's display befor
 
 `divide-y` has no gap equivalent — put a border on the child:
 `borderTopWidth: { default: 0, ':not(:first-child)': 1 }` plus `borderTopStyle: 'solid'`.
+Its colour is Tailwind's default border colour, set in preflight rather than by the utility:
+`#e5e7eb` under `@tailwind base`, `currentColor` under `@import "tailwindcss"`. Write that value.
 
 ---
 

@@ -1,6 +1,6 @@
 # Setup
 
-Step 0 of the loop, once per project. An unwired build renders every converted component
+Step 2 of the loop, once per project. An unwired build renders every converted component
 unstyled, which looks exactly like a bad conversion and is not one.
 
 ## Is it already installed?
@@ -17,7 +17,8 @@ cat package.json | grep -i stylex
 ```bash
 npm install @stylexjs/stylex                      # runtime, always
 npm install --save-dev @stylexjs/unplugin         # Vite, Rollup, Webpack, esbuild, Rspack
-npm install --save-dev @stylexjs/babel-plugin @stylexjs/postcss-plugin   # Next.js instead
+npm install --save-dev @stylexswc/nextjs-plugin    # Next.js 15+
+npm install --save-dev @stylexjs/babel-plugin @stylexjs/postcss-plugin   # Next.js 14
 ```
 
 Use the project's own package manager — `bun add`, `pnpm add`, `yarn add`.
@@ -34,8 +35,16 @@ export default defineConfig({
 ```
 
 Each bundler has its own adapter — `@stylexjs/unplugin/vite`, `/webpack`, `/rspack`,
-`/esbuild`, `/rollup` — with the same options; the package root loads all of them at once. **Next.js** needs `babel.config.js` plus `postcss.config.js` — copy them from the
-installation doc linked above rather than from memory.
+`/esbuild`, `/rollup` — with the same options; the package root loads all of them at once.
+
+**Next.js 15+** — `@stylexswc/nextjs-plugin` keeps SWC. Copy its `next.config` from the
+package README rather than from memory.
+
+**Next.js 14** — `babel.config.js` plus `postcss.config.js`, copied from the installation page
+read in step 1. This switches the whole build off SWC, which costs: `next/font` fails with
+`"next/font" requires SWC` (self-host the fonts), client JavaScript grows about 10% gzipped
+before a single style is migrated, and `@babel/runtime` must stay on v7. Say so in your summary
+before taking this path.
 
 **Vitest** — a separate `vitest.config.ts` replaces `vite.config.ts`, and each entry in
 `test.projects` starts with an empty plugin list. Every config that imports StyleX source needs
@@ -70,13 +79,27 @@ The plugin appends every generated rule to that file. Without it nothing is emit
 
 ## Two settings the migration needs
 
-**`useCSSLayers: false` while Tailwind is still in the build.** Unlayered CSS beats layered
-CSS. With layers on, StyleX loses to the
-Tailwind you have not deleted yet and migrated components keep their old styles. Flip it to
-`true` after the last Tailwind class is gone.
+**`useCSSLayers: false` while any unlayered CSS is in the build.** Unlayered CSS beats layered
+CSS, so with layers on StyleX loses to Tailwind, to the base layer you keep after Tailwind, to a
+reset, to `@font-face`, to a global stylesheet. Flip it to `true` only when none of those
+remain, which for most projects means never.
 
 **`include` covering the files you are migrating**, for the Next.js/PostCSS path. A file outside
 the pattern compiles to nothing.
+
+## Leaving Tailwind
+
+Tailwind's base output stays when Tailwind goes. It holds preflight — `box-sizing`, heading
+sizes, margins, the default border colour — and the theme variables, resolved against the
+project's config. Compile it once with Tailwind's own CLI and import the output where the entry
+CSS was:
+
+- Entry written as `@tailwind base;` — a file holding only that line:
+  `npx tailwindcss -i base.css -o src/tailwind-base.css`.
+- Entry written as `@import "tailwindcss";` — a copy of the entry with that line changed to
+  `@import "tailwindcss" source(none);`: `npx @tailwindcss/cli -i copy.css -o src/tailwind-base.css`.
+
+Done when the app renders the same with the Tailwind import gone.
 
 ## Prove development works before converting anything
 

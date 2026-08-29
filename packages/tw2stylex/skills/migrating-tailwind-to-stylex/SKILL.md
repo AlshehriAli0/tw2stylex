@@ -1,9 +1,10 @@
 ---
 name: migrating-tailwind-to-stylex
 description: >-
-  Migrates Tailwind to StyleX with the tw2sx CLI, then hand-resolves what it skips.
-  Use when moving code off Tailwind, when working a tw2sx report, when installing StyleX
-  into a build, or when writing StyleX styles by hand.
+  Migrates Tailwind to StyleX with the tw2sx CLI, then hand-resolves what it skips. Read in
+  full before the first tw2sx command. Use when moving code off Tailwind, when a tw2sx report
+  or skip is in front of you, when installing StyleX into a build, or when writing StyleX
+  styles by hand.
 ---
 
 # Migrating Tailwind to StyleX
@@ -12,34 +13,48 @@ description: >-
 when it can prove the CSS declarations come out identical. What it cannot prove, it **skips**
 and reports. The skips are your work.
 
-Pixels stay identical. A style you cannot convert stays in the file and goes into your summary.
+Pixels stay identical.
 
 ## The loop
 
 - [ ] 0. `tw2sx init` — installs this skill into the project. Run it when the `version` in this
       file's frontmatter differs from `tw2sx --version`: the copy you are reading came from an
       older tw2sx and may name reasons or a fix order the tool no longer uses.
-- [ ] 1. StyleX installed and proven to render — [setup.md](references/setup.md). Once per project.
-- [ ] 2. Tokens and shared primitives in place before any component converts —
+- [ ] 1. Read three pages to their last line, once per project, before any other step:
+      [Thinking in StyleX](https://stylexjs.com/docs/learn/thinking-in-stylex), and Facebook's
+      two files written for agents —
+      [authoring](https://raw.githubusercontent.com/facebook/stylex/main/packages/docs/static/llm/stylex-authoring.md)
+      and
+      [installation](https://raw.githubusercontent.com/facebook/stylex/main/packages/docs/static/llm/stylex-installation.md).
+      They are the model this skill assumes; every rule below is a corollary. Done when you can
+      say, without looking, why StyleX has no descendant selectors.
+- [ ] 2. StyleX installed and proven to render — [setup.md](references/setup.md). Once per project.
+- [ ] 3. Tokens and shared primitives in place before any component converts —
       [tokens.md](references/tokens.md). Every component references them, so converting first
       means converting twice.
-- [ ] 3. `tw2sx plan <path>` — writes a report, edits nothing.
-- [ ] 4. Read `MISMATCHES`. **At 0, continue. Above 0, stop and tell the user** —
+- [ ] 4. `tw2sx plan <path>` — writes a report, edits nothing.
+- [ ] 5. Read `MISMATCHES`. **At 0, continue. Above 0, stop and tell the user** —
       the tool generated StyleX that does not match Tailwind, which is a tw2sx bug.
-- [ ] 5. Fix skips in fix order: every `safe`, then every `needs-lookup`, then every
-      `check-first`, then every `unknown`.
-- [ ] 6. `tw2sx plan <path>` again. Continue only when the skip count dropped and mismatches
+- [ ] 6. Fix skips in fix order: every `safe`, then every `needs-lookup`, then every
+      `check-first`, then every `unknown` — each by its recipe in
+      [reason-codes.md](references/reason-codes.md), read before the first skip of that reason.
+- [ ] 7. `tw2sx plan <path>` again. Continue only when the skip count dropped and mismatches
       are still 0.
-- [ ] 7. Repeat from 5 until every remaining skip is one you can name a reason for keeping.
-- [ ] 8. Run the project's own typecheck and build. Both clean.
-- [ ] 9. Load a page you changed and read one converted element's computed styles. This
-      confirms StyleX is wired up and the styles arrive. `plan` already proved the conversion
-      declaration by declaration, so spend the look on what you wrote by hand: hover states,
-      dark mode, anything conditional.
-- [ ] 10. Summarise: usages converted, skips resolved, and each skip you kept with why.
+- [ ] 8. Repeat from 6 until every remaining skip is one you can name a reason for keeping.
+- [ ] 9. Run the project's own typecheck and build. Both clean.
+- [ ] 10. Screenshot-diff every changed route, in every theme the app has, against the last
+      Tailwind commit (`git worktree add ../before <commit>`, build both). `plan` proved the
+      converted usages; the ones you resolved by hand have only this check. Done when the diff is
+      zero, or every difference is one you can name.
+- [ ] 11. Summarise: usages converted, skips resolved, and each skip you kept with why.
 
 `tw2sx explain "<classes>"` prints the exact StyleX object for any class string and whether it
-verified. Reach for it whenever you are about to write a value from memory.
+verified. Reach for it whenever you are about to write a value from memory; `--stdin` answers
+one class string per line in a single run. The answer is Tailwind's alone: a rule the project
+wrote itself against the same class name is not in it, so grep for `.the-class` first.
+
+`tw2sx` is the binary `tw2stylex` installs. When the shell cannot find it, run
+`npx tw2stylex <command>` from the project root.
 
 Migrate **leaves first** — a component only after the components it renders. A StyleX child
 inside a Tailwind parent is where cascade surprises live.
@@ -56,7 +71,11 @@ Then take the scaffolding back out:
       the build — [component-api.md](references/component-api.md).
 - [ ] Drop `className` and `style` DOM props from components that exposed them only so Tailwind
       callers could reach in. A `style` prop typed with `StyleXStylesWithout` stays.
-- [ ] Flip `useCSSLayers` to `true` — [setup.md](references/setup.md).
+- [ ] Keep Tailwind's base output — preflight and the theme variables — as a plain CSS file
+      before deleting Tailwind. Without it the layout falls back to browser defaults —
+      [setup.md](references/setup.md#leaving-tailwind).
+- [ ] Decide `useCSSLayers` by the rule in [setup.md](references/setup.md): that kept file is
+      unlayered CSS.
 - [ ] `grep -rn "var(--" src`: each variable it finds is a project token. Done when every one
       is defined outside Tailwind's `@theme` — [tokens.md](references/tokens.md).
 - [ ] Remove `tailwindcss`, its entry CSS, and `tw2sx` from the project.
@@ -64,7 +83,7 @@ Then take the scaffolding back out:
 ## Reading a skip
 
 ```
-src/ui/Card.tsx:41:18: skipped descendant-selector "[&_svg]:size-4": … help: Style the child directly.
+src/ui/Card.tsx:41:18: skipped descendant-selector "[&_svg]:size-4": … fix: Style the child component directly instead.
 ```
 
 **reason** says why it was skipped; **fix** says what you do about it:
@@ -81,7 +100,8 @@ Filter with `tw2sx skipped <report.json> --reason <r> --fix <a>`.
 ## Silent failure is the house style
 
 StyleX rejects most of what it dislikes by rendering nothing: the style is simply gone. Every
-rule below is **silent** when broken, so confirm your edits by re-running `tw2sx plan`.
+rule below is **silent** when broken — the build passes, `plan` sees only what it converted, and
+the screenshot diff in step 10 is what catches it.
 
 **Overwriting a property wipes every condition on it.** StyleX merges per
 property, not per property-per-state. The most dangerous difference from Tailwind:
@@ -176,8 +196,7 @@ file rather than in a pass of their own:
 
 ## References
 
-- [reason-codes.md](references/reason-codes.md) — one recipe per reason code. Read the section
-  for any reason you have not yet handled this session.
+- [reason-codes.md](references/reason-codes.md) — one recipe per reason code.
 - [component-api.md](references/component-api.md) — the `style` prop contract, banning owned
   properties at the type level, converting `cva`, the `className` bridge. Read it for
   `passed-in-classes`, `variant-function`, or any component that accepts styling from callers.
@@ -187,7 +206,5 @@ file rather than in a pass of their own:
   `useCSSLayers`, proving it renders. Read it before the first conversion in a project, or when
   a converted component renders unstyled.
 
-Facebook publishes two files written for agents —
-[authoring](https://raw.githubusercontent.com/facebook/stylex/main/packages/docs/static/llm/stylex-authoring.md)
-and [installation](https://raw.githubusercontent.com/facebook/stylex/main/packages/docs/static/llm/stylex-installation.md).
-Fetch them for any API this skill does not cover, and to check a rule here that looks wrong.
+The three pages from step 1 are the authority. Fetch them again for any API this skill does not
+cover, and to check a rule here that looks wrong.
