@@ -18,7 +18,12 @@ export type Usage = {
   skips: Skip[];
 };
 
-export type ScanResult = { usages: Usage[]; hasStyleX: boolean; styleXNamespace?: string };
+export type ScanResult = {
+  usages: Usage[];
+  hasStyleX: boolean;
+  styleXNamespace?: string;
+  importInsertAt: number;
+};
 
 const MERGE_FNS = new Set(["cn", "clsx", "classnames", "twMerge", "twJoin", "cx"]);
 
@@ -282,10 +287,17 @@ const cvaUsages = (call: t.CallExpression): Usage[] => {
   return usages;
 };
 
+const lineAfterDirectives = (ast: t.File, code: string): number => {
+  const directivesEnd = ast.program.directives.at(-1)?.end;
+  if (typeof directivesEnd !== "number") return 0;
+  const lineBreak = code.indexOf("\n", directivesEnd);
+  return lineBreak === -1 ? code.length : lineBreak + 1;
+};
+
 const COULD_HOLD_A_USAGE = /className|class\s*=|\bcva\s*\(|@stylexjs\//;
 
 export const scanFile = (code: string, filename: string): ScanResult => {
-  if (!COULD_HOLD_A_USAGE.test(code)) return { usages: [], hasStyleX: false };
+  if (!COULD_HOLD_A_USAGE.test(code)) return { usages: [], hasStyleX: false, importInsertAt: 0 };
 
   const ast = parse(code, {
     sourceFilename: filename,
@@ -328,5 +340,5 @@ export const scanFile = (code: string, filename: string): ScanResult => {
     else if (t.isImportDeclaration(node)) readImport(node);
   });
 
-  return { usages, hasStyleX, styleXNamespace };
+  return { usages, hasStyleX, styleXNamespace, importInsertAt: lineAfterDirectives(ast, code) };
 };

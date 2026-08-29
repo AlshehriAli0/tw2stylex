@@ -112,6 +112,27 @@ export const Card = () => (
   });
 });
 
+describe("the import lands below the directive prologue", () => {
+  // A directive is only a directive as the first statement. An import above "use client"
+  // silently turns a client component into a server component.
+  test('"use client" stays the first statement', () => {
+    const file = write(
+      "client.tsx",
+      `"use client";\n\nexport const A = () => <div className="flex" />;\n`,
+    );
+    applyFile(sys, file, true);
+    expect(fs.readFileSync(file, "utf8")).toStartWith(
+      `"use client";\nimport * as stylex from '@stylexjs/stylex';\n`,
+    );
+  });
+
+  test("without a directive the import is the first line", () => {
+    const file = write("plain-top.tsx", `export const A = () => <div className="flex" />;\n`);
+    applyFile(sys, file, true);
+    expect(fs.readFileSync(file, "utf8")).toStartWith("import * as stylex");
+  });
+});
+
 describe("repeated runs", () => {
   test("an already-migrated file is recognised and left alone", () => {
     const file = write("twice.tsx", `export const A = () => <div className="flex p-4" />;\n`);

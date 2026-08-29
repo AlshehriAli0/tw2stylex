@@ -168,6 +168,19 @@ describe("an element with two styling sources cannot take a props spread", () =>
   });
 });
 
+describe("where the StyleX import may go", () => {
+  test("below the directive prologue", () => {
+    const code = `"use client";\n'use strict';\nexport const A = () => <div className="p-4" />;\n`;
+    expect(scanFile(code, "x.tsx").importInsertAt).toBe(code.indexOf("export"));
+  });
+
+  test("at the top when there is none", () => {
+    expect(
+      scanFile(`export const A = () => <div className="p-4" />;\n`, "x.tsx").importInsertAt,
+    ).toBe(0);
+  });
+});
+
 describe("only host elements can receive a props spread", () => {
   test.each(["div", "span", "button", "my-element"])("%s is a host element", tag => {
     expect(reasonsIn(`<${tag} className="flex" />`)).toEqual([]);
