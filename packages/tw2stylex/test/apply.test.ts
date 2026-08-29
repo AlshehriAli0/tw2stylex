@@ -112,7 +112,7 @@ export const Card = () => (
   });
 });
 
-describe("running twice changes nothing the second time", () => {
+describe("repeated runs", () => {
   test("an already-migrated file is recognised and left alone", () => {
     const file = write("twice.tsx", `export const A = () => <div className="flex p-4" />;\n`);
     applyFile(sys, file, true);
@@ -120,18 +120,66 @@ describe("running twice changes nothing the second time", () => {
 
     const second = applyFile(sys, file, true);
 
-    expect(second.reason).toBe("already-stylex");
+    expect(second.reason).toBe("nothing-convertible");
+    expect(second.skipped).toBe(0);
     expect(second.rewritten).toBe(0);
     expect(second.written).toBe(false);
     expect(fs.readFileSync(file, "utf8")).toBe(afterFirst);
   });
 
-  test("a file that already imports stylex is never touched, even with classes left in it", () => {
+  test("an existing StyleX namespace import is reused", () => {
     const code = `import * as stylex from '@stylexjs/stylex';\nexport const A = () => <div className="flex" />;\n`;
     const file = write("mixed.tsx", code);
     const result = applyFile(sys, file, true);
+    const out = fs.readFileSync(file, "utf8");
+
+    expect(result.rewritten).toBe(1);
+    expect(out.match(/@stylexjs\/stylex/g)).toHaveLength(1);
+    expect(out).toContain("stylex.props(styles.el1)");
+  });
+
+  test("an aliased StyleX namespace import is reused", () => {
+    const file = write(
+      "aliased.tsx",
+      `import * as sx from '@stylexjs/stylex';\nexport const A = () => <div className="flex" />;\n`,
+    );
+    applyFile(sys, file, true);
+    const out = fs.readFileSync(file, "utf8");
+
+    expect(out).toContain("sx.props(styles.el1)");
+    expect(out).toContain("const styles = sx.create({");
+  });
+
+  test("a StyleX import without a reusable namespace is left alone", () => {
+    const code = `import { props } from '@stylexjs/stylex';\nexport const A = () => <div className="flex" />;\n`;
+    const file = write("named-import.tsx", code);
+    const result = applyFile(sys, file, true);
+
     expect(result.reason).toBe("already-stylex");
     expect(fs.readFileSync(file, "utf8")).toBe(code);
+  });
+
+  test("a partial migration resumes after a skipped usage is resolved", () => {
+    const file = write(
+      "resume.tsx",
+      `export const A = () => (<div className="dark:text-white"><b className="flex" /></div>);\n`,
+    );
+    const first = applyFile(sys, file, true);
+    const partial = fs.readFileSync(file, "utf8");
+
+    expect(first.rewritten).toBe(1);
+    expect(first.skipped).toBe(1);
+    expect(partial).toContain(`className="dark:text-white"`);
+
+    fs.writeFileSync(file, partial.replace("dark:text-white", "text-sm"));
+    const second = applyFile(sys, file, false);
+
+    expect(second.rewritten).toBe(1);
+    expect(second.skipped).toBe(0);
+    expect(second.diff?.match(/@stylexjs\/stylex/g)).toHaveLength(1);
+    expect(second.diff).toContain("stylex.props(tw2sxStyles.el1)");
+    expect(second.diff).toContain("const styles = stylex.create({");
+    expect(second.diff).toContain("const tw2sxStyles = stylex.create({");
   });
 });
 

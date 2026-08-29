@@ -249,6 +249,22 @@ describe("a file that already uses StyleX is recognised", () => {
   test("an unrelated import does not", () => {
     expect(scanFile(`import x from 'stylex-lookalike';`, "x.tsx").hasStyleX).toBe(false);
   });
+
+  test("a namespace import exposes the binding apply can reuse", () => {
+    expect(scanFile(`import * as sx from '@stylexjs/stylex';`, "x.tsx").styleXNamespace).toBe("sx");
+  });
+
+  test("a named import does not pretend to be a namespace", () => {
+    expect(
+      scanFile(`import { props } from '@stylexjs/stylex';`, "x.tsx").styleXNamespace,
+    ).toBeUndefined();
+  });
+
+  test("a type-only namespace is not reusable at runtime", () => {
+    expect(
+      scanFile(`import type * as stylex from '@stylexjs/stylex';`, "x.tsx").styleXNamespace,
+    ).toBeUndefined();
+  });
 });
 
 describe("parsing is tolerant enough to keep going", () => {
