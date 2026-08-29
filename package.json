@@ -31,7 +31,7 @@
     "lint:fix": "oxlint --fix",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
-    "types:check": "tsc --noEmit",
+    "types:check": "tsc -p tsconfig.check.json",
     "check": "bun run format:check && bun run lint && bun run types:check && bun test",
     "prepublishOnly": "bun run check",
     "prepack": "bun run build"
