@@ -41,7 +41,7 @@ const filesUnder = (dir: string): string[] =>
 const stampVersion = (front: string, stamp: string): string => {
   const end = front.indexOf("\n---\n", 4);
   if (end === -1) throw new Error("SKILL.md has no frontmatter to stamp.");
-  return `${front.slice(0, end)}\nmetadata:\n  package: tw2sx\n  version: "${stamp}"${front.slice(end)}`;
+  return `${front.slice(0, end)}\nmetadata:\n  package: tw2stylex\n  version: "${stamp}"${front.slice(end)}`;
 };
 
 const writeSkill = (destination: string, name: string, stamp: string): void => {
@@ -56,10 +56,10 @@ const writeSkill = (destination: string, name: string, stamp: string): void => {
 export const ignoreReports = (projectRoot: string): void => {
   const file = path.join(projectRoot, ".gitignore");
   const current = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-  const alreadyIgnored = current.split("\n").some(line => /^\.tw2sx\/?$/.test(line.trim()));
+  const alreadyIgnored = current.split("\n").some(line => /^\.tw2stylex\/?$/.test(line.trim()));
   if (alreadyIgnored) return;
   const onItsOwnLine = current === "" || current.endsWith("\n") ? "" : "\n";
-  fs.writeFileSync(file, `${current}${onItsOwnLine}.tw2sx/\n`);
+  fs.writeFileSync(file, `${current}${onItsOwnLine}.tw2stylex/\n`);
 };
 
 export const installedSkills = (projectRoot: string): string[] =>

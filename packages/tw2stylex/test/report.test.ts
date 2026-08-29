@@ -41,7 +41,7 @@ const file = (over: Partial<FileResult> = {}): FileResult => ({
 
 const report = (files: FileResult[], over: Partial<Report["summary"]> = {}): Report => ({
   ok: files.every(f => f.mismatches.length === 0),
-  tool: "tw2sx",
+  tool: "tw2stylex",
   tailwind: "4.3.3",
   entry: "/p/src/index.css",
   summary: {
@@ -118,7 +118,7 @@ describe("mismatches are a hard stop and print first", () => {
     const out = renderReport(report([file({ mismatches: [mismatch("color")] })]), 20);
     expect(out).toContain("MISMATCHES: 1");
     expect(out).toContain("STOP");
-    expect(out).toContain("tw2sx bug");
+    expect(out).toContain("tw2stylex bug");
   });
 
   test("the mismatch line names the style, condition, property and both values", () => {
@@ -158,7 +158,7 @@ describe("skips are grouped in the order they should be worked", () => {
   });
 
   test("Next points at the first bucket with work in it", () => {
-    expect(renderReport(mixed, 20, "r.json")).toContain("tw2sx skipped r.json --fix safe");
+    expect(renderReport(mixed, 20, "r.json")).toContain("tw2stylex skipped r.json --fix safe");
   });
 
   test("with nothing safe left, Next moves down the order", () => {

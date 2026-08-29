@@ -198,9 +198,9 @@ describe("repeated runs", () => {
     expect(second.rewritten).toBe(1);
     expect(second.skipped).toBe(0);
     expect(second.diff?.match(/@stylexjs\/stylex/g)).toHaveLength(1);
-    expect(second.diff).toContain("stylex.props(tw2sxStyles.div)");
+    expect(second.diff).toContain("stylex.props(tw2stylexStyles.div)");
     expect(second.diff).toContain("const styles = stylex.create({");
-    expect(second.diff).toContain("const tw2sxStyles = stylex.create({");
+    expect(second.diff).toContain("const tw2stylexStyles = stylex.create({");
   });
 });
 
@@ -397,7 +397,7 @@ describe("the write itself is atomic", () => {
   test("no temp file is left behind", () => {
     const file = write("atomic.tsx", `export const A = () => <div className="flex" />;\n`);
     applyFile(sys, file, true);
-    expect(fs.readdirSync(dir).filter(f => f.includes("tw2sx-"))).toEqual([]);
+    expect(fs.readdirSync(dir).filter(f => f.includes("tw2stylex-"))).toEqual([]);
   });
 
   test("the file is never observed empty - the rename replaces it whole", () => {
@@ -411,7 +411,7 @@ describe("the dirty-tree guard reads real git state", () => {
   let repo: string;
 
   beforeAll(() => {
-    repo = fs.mkdtempSync(path.join(os.tmpdir(), "tw2sx-git-"));
+    repo = fs.mkdtempSync(path.join(os.tmpdir(), "tw2stylex-git-"));
     const git = (...a: string[]): void => {
       execFileSync("git", a, { cwd: repo, stdio: "ignore" });
     };
@@ -438,7 +438,7 @@ describe("the dirty-tree guard reads real git state", () => {
 
   // Not a repo is not the same as clean: apply must not treat "cannot tell" as "safe".
   test("outside a repo the answer is null, not an empty list", () => {
-    const loose = fs.mkdtempSync(path.join(os.tmpdir(), "tw2sx-nogit-"));
+    const loose = fs.mkdtempSync(path.join(os.tmpdir(), "tw2stylex-nogit-"));
     try {
       expect(dirtyFiles(loose)).toBeNull();
     } finally {
@@ -456,8 +456,8 @@ describe("the generated style object never collides with the file's own names", 
     applyFile(sys, file, true);
     const out = fs.readFileSync(file, "utf8");
 
-    expect(out).toContain("const tw2sxStyles = stylex.create({");
-    expect(out).toContain("stylex.props(tw2sxStyles.div)");
+    expect(out).toContain("const tw2stylexStyles = stylex.create({");
+    expect(out).toContain("stylex.props(tw2stylexStyles.div)");
     expect(out).not.toContain("stylex.props(styles.");
   });
 
@@ -468,8 +468,8 @@ describe("the generated style object never collides with the file's own names", 
     );
     const planned = processFile(sys, file);
     applyFile(sys, file, true);
-    expect(planned.source).toContain("const tw2sxStyles = stylex.create({");
-    expect(fs.readFileSync(file, "utf8")).toContain("stylex.props(tw2sxStyles.div)");
+    expect(planned.source).toContain("const tw2stylexStyles = stylex.create({");
+    expect(fs.readFileSync(file, "utf8")).toContain("stylex.props(tw2stylexStyles.div)");
   });
 
   test("an unrelated file keeps the plain name", () => {

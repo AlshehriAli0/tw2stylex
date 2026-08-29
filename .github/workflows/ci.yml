@@ -67,7 +67,7 @@ jobs:
       - name: the CLI converts and verifies
         run: |
           cd "$RUNNER_TEMP/consumer"
-          npx tw2sx plan app --json | tee plan.json
+          npx tw2stylex plan app --json | tee plan.json
           test "$(jq -r '.ok' plan.json)" = "true"
           test "$(jq -r '.summary.converted' plan.json)" = "1"
 
@@ -78,4 +78,4 @@ jobs:
           rm -f tailwind.config.js
           printf '@import "tailwindcss";\n' > app/globals.css
           npm i --silent tailwindcss@^4
-          npx tw2sx plan app --css app/globals.css --json | jq -e '.ok == true'
+          npx tw2stylex plan app --css app/globals.css --json | jq -e '.ok == true'

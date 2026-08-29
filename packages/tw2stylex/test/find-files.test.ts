@@ -8,7 +8,7 @@ import { collectFiles, findEntryCss } from "../src/find-files.ts";
 const made: string[] = [];
 
 const workspace = (files: Record<string, string>): string => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tw2sx-files-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tw2stylex-files-"));
   made.push(dir);
   for (const [rel, content] of Object.entries(files)) {
     const file = path.join(dir, rel);

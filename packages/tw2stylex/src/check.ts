@@ -66,7 +66,7 @@ const KEEP_MEDIA_QUERIES_AS_IS = false;
 const REPORT_DROPPED_SHORTHANDS = "throw";
 
 const babelOptions = once((): TransformOptions => ({
-  filename: "/tw2sx/virtual.js",
+  filename: "/tw2stylex/virtual.js",
   babelrc: false,
   configFile: false,
   plugins: [
@@ -78,7 +78,7 @@ const babelOptions = once((): TransformOptions => ({
         enableMinifiedKeys: false,
         enableMediaQueryOrder: KEEP_MEDIA_QUERIES_AS_IS,
         propertyValidationMode: REPORT_DROPPED_SHORTHANDS,
-        unstable_moduleResolution: { type: "commonJS", rootDir: "/tw2sx" },
+        unstable_moduleResolution: { type: "commonJS", rootDir: "/tw2stylex" },
       },
     ],
   ],

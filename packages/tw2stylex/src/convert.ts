@@ -47,7 +47,7 @@ const compileFailed = (message: string): Converted =>
     {
       reason: "stylex-compile-error",
       detail: `The StyleX we generated does not compile: ${lastLine(message)}`,
-      hint: "This is a tw2sx bug. Convert this one by hand and please report it.",
+      hint: "This is a tw2stylex bug. Convert this one by hand and please report it.",
     },
   ]);
 
@@ -59,7 +59,7 @@ const fromVerdict = (style: Style, checked: VerifyResult): Converted => {
       {
         reason: "lost-condition",
         detail: `The StyleX we generated differs from Tailwind in ${checked.mismatches.length} place(s).`,
-        hint: "See `mismatches` in the JSON report. This is a tw2sx bug; convert this one by hand.",
+        hint: "See `mismatches` in the JSON report. This is a tw2stylex bug; convert this one by hand.",
       },
     ],
     checked.mismatches,

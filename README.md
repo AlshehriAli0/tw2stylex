@@ -1,4 +1,4 @@
-# tw2sx
+# tw2stylex
 
 Agent-driven Tailwind to StyleX migration. Converts what it can prove, and turns the rest into
 work an agent can pick up.
@@ -9,11 +9,11 @@ work an agent can pick up.
   <a href="https://github.com/AlshehriAli0/tw2stylex/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/tw2stylex" alt="license" /></a>
 </p>
 
-<img src="assets/demo.svg" alt="tw2sx plan output" width="750">
+<img src="assets/demo.svg" alt="tw2stylex plan output" width="750">
 
-No codemod finishes this job. tw2sx converts only what it can verify against the real StyleX
+No codemod finishes this job. tw2stylex converts only what it can verify against the real StyleX
 compiler, which is what `MISMATCHES: 0` means, and reports the rest as typed skips.
-`tw2sx init` sets the repo up so your agent can work through them.
+`tw2stylex init` sets the repo up so your agent can work through them.
 
 ## Install
 
@@ -25,10 +25,10 @@ npx tw2stylex init     # sets the repo up for your agent
 ## The loop
 
 ```bash
-tw2sx plan src/components           # MISMATCHES must be 0; the skips are the work
-tw2sx skipped .tw2sx/plan-*.json --fix safe
+tw2stylex plan src/components           # MISMATCHES must be 0; the skips are the work
+tw2stylex skipped .tw2stylex/plan-*.json --fix safe
                                     # ...resolve those by hand
-tw2sx apply src/components --write  # rewrites only what converts cleanly
+tw2stylex apply src/components --write  # rewrites only what converts cleanly
 ```
 
 Repeat until the skip count stops dropping. `plan` and `apply` agree on what converts, so the
@@ -36,11 +36,11 @@ report never promises something `apply` will skip.
 
 | command | what it does |
 |---|---|
-| `tw2sx init` | Set the repo up for your agent. Safe to re-run. |
-| `tw2sx explain "<classes>"` | Resolve a class string to a StyleX object. Touches nothing. |
-| `tw2sx plan <path>` | Scan, convert, verify. Writes a JSON report. **Never edits code.** |
-| `tw2sx apply <path>` | Rewrite the sites that convert cleanly. Dry run unless `--write`. |
-| `tw2sx skipped <report>` | Re-read a report, filtered by `--reason` / `--fix`. |
+| `tw2stylex init` | Set the repo up for your agent. Safe to re-run. |
+| `tw2stylex explain "<classes>"` | Resolve a class string to a StyleX object. Touches nothing. |
+| `tw2stylex plan <path>` | Scan, convert, verify. Writes a JSON report. **Never edits code.** |
+| `tw2stylex apply <path>` | Rewrite the sites that convert cleanly. Dry run unless `--write`. |
+| `tw2stylex skipped <report>` | Re-read a report, filtered by `--reason` / `--fix`. |
 
 ## Skips
 
@@ -72,15 +72,15 @@ it owns from its own style prop. [component-api.md] has the pattern.
 
 ## Notes
 
-`tailwindcss` is a peer dependency. tw2sx runs your copy, not a bundled one, so your theme and
+`tailwindcss` is a peer dependency. tw2stylex runs your copy, not a bundled one, so your theme and
 plugins are in scope. It looks for the CSS that imports Tailwind, or a `tailwind.config` file.
 Pass `--css` or `--config` if it picks the wrong one.
 
-Pin both versions. tw2sx reaches into Tailwind's internals, and comparing skip counts between
+Pin both versions. tw2stylex reaches into Tailwind's internals, and comparing skip counts between
 runs only works if nothing moved underneath.
 
 Exit codes: `0` clean · `1` finished with skips · `2` usage · `3` precondition · `10` internal.
-`tw2sx help` has the flags.
+`tw2stylex help` has the flags.
 
 Run against a production Tailwind app: 970 files, 7,125 usages, 5,509 converted, zero
 mismatches, 809ms. Node and Bun produce identical output.

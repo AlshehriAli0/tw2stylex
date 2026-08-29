@@ -45,7 +45,7 @@ describe("Tailwind's ! modifier is not silently dropped", () => {
 });
 
 describe("shorthands StyleX drops are caught before they reach the compiler", () => {
-  // Reaching the compiler would report `stylex-compile-error` - "this is a tw2sx bug" - for
+  // Reaching the compiler would report `stylex-compile-error` - "this is a tw2stylex bug" - for
   // something with a plain longhand rewrite. That happened for the block-direction borders.
   const VALUE_FOR: Record<string, string> = { all: "unset", animation: "a_1s" };
 

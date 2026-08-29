@@ -50,7 +50,7 @@ export const newSheet = (): Sheet => {
   return { styles, add };
 };
 
-const PREFERRED = ["styles", "tw2sxStyles"];
+const PREFERRED = ["styles", "tw2stylexStyles"];
 
 export const nameIsTaken =
   (code: string) =>
@@ -61,6 +61,6 @@ export const styleObjectName = (taken: (name: string) => boolean): string => {
   const free = PREFERRED.find(name => !taken(name));
   if (free !== undefined) return free;
   let n = 2;
-  while (taken(`tw2sxStyles${n}`)) n += 1;
-  return `tw2sxStyles${n}`;
+  while (taken(`tw2stylexStyles${n}`)) n += 1;
+  return `tw2stylexStyles${n}`;
 };
