@@ -72,7 +72,7 @@ Then take the scaffolding back out:
       callers could reach in. A `style` prop typed with `StyleXStylesWithout` stays.
 - [ ] Keep Tailwind's base output — preflight and the theme variables — as a plain CSS file
       before deleting Tailwind. Without it the layout falls back to browser defaults —
-      [setup.md](references/setup.md#leaving-tailwind).
+      "Leaving Tailwind" in [setup.md](references/setup.md).
 - [ ] Decide `useCSSLayers` by the rule in [setup.md](references/setup.md): that kept file is
       unlayered CSS.
 - [ ] `grep -rn "var(--" src`: each variable it finds is a project token. Done when every one

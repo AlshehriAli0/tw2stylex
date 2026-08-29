@@ -66,7 +66,7 @@ named marker, or the style silently never applies. `anySibling`/`siblingAfter` c
 The element matches only under some ancestor — most often class-based dark mode, which
 compiles to `&:is(.dark *)`.
 
-**Dark mode:** pick the mechanism in [tokens.md](./tokens.md#dark-mode), then the component
+**Dark mode:** pick the mechanism under "Dark mode" in [tokens.md](./tokens.md), then the component
 references one token unconditionally and the pair of classes collapses into it.
 
 **Any other ancestor state:** `stylex.when.ancestor()` with a marker, as in `sibling-state`.
