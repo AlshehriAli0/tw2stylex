@@ -199,11 +199,11 @@ const styleAttrSkip = (element: t.JSXOpeningElement | undefined): Skip | undefin
   };
 };
 
-const isHostElement = (element: t.JSXOpeningElement): boolean =>
-  t.isJSXIdentifier(element.name) && /^[a-z]/.test(element.name.name);
+const isHostElement = (element: t.JSXOpeningElement | undefined): boolean =>
+  /^[a-z]/.test(tagOf(element) ?? "");
 
 const componentSkip = (element: t.JSXOpeningElement | undefined): Skip | undefined =>
-  element && isHostElement(element)
+  isHostElement(element)
     ? undefined
     : {
         reason: "component-class-name",

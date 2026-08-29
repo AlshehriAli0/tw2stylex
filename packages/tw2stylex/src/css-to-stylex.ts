@@ -4,7 +4,7 @@ export type StyleValue = string | number | null | { [cond: string]: StyleValue }
 export type Style = Record<string, StyleValue>;
 type ConditionTree = { [cond: string]: StyleValue };
 
-const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+export const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const NUMERIC = /^-?\d+(\.\d+)?$/;
 
 const isTree = (v: StyleValue | undefined): v is ConditionTree =>
