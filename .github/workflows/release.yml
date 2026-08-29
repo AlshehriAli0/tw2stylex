@@ -1,0 +1,104 @@
+name: Release
+
+# Publishes tw2sx through npm trusted publishing: no token lives here, npm verifies the OIDC
+# claim this workflow presents. That needs `id-token: write` below, npm 11.5.1 or newer, and this
+# repository plus this filename registered as the package's trusted publisher on npmjs.com.
+# Rename the file and publishing stops until npm is told the new name.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version bump"
+        required: true
+        default: "patch"
+        type: choice
+        options: [patch, minor, major]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A release from a side branch publishes code nobody reviewed on main.
+      - name: only from main
+        run: test "$GITHUB_REF" = "refs/heads/main" || { echo "got $GITHUB_REF"; exit 1; }
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Trusted publishing needs npm 11.5.1+ and the runner ships 10. Pinned to the major so a
+      # release does not depend on whatever npm published this week.
+      - run: npm install -g npm@11
+
+      - run: bun install --frozen-lockfile
+
+      # A release that ships a broken tarball is worse than no release, and the ways it breaks
+      # are invisible in the repo: a files list that misses the skill, a README that was never
+      # copied in. So the gate runs again here, against what is about to be published.
+      - name: check
+        run: |
+          bun run check
+          bun run pack:tw2sx
+          mkdir -p "$RUNNER_TEMP/tarball"
+          tar -xzf tw2sx-*.tgz -C "$RUNNER_TEMP/tarball"
+          test -f "$RUNNER_TEMP/tarball/package/README.md"
+          test -f "$RUNNER_TEMP/tarball/package/LICENSE"
+          test -f "$RUNNER_TEMP/tarball/package/dist/cli.js"
+          test -f "$RUNNER_TEMP/tarball/package/skills/migrating-tailwind-to-stylex/SKILL.md"
+          rm -f tw2sx-*.tgz
+
+      - name: bump
+        id: bump
+        run: |
+          version=$(bun run scripts/bump.ts "${{ inputs.version }}")
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "v$version is already tagged, so it has been released once"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: commit and tag
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git commit -am "release: tw2sx v${VERSION}"
+          # Annotated and pushed by name. --follow-tags ignores a lightweight tag, which leaves
+          # the remote with no tag and gh with nothing to attach a release to.
+          git tag -a "v${VERSION}" -m "tw2sx v${VERSION}"
+          git push origin HEAD
+          git push origin "v${VERSION}"
+
+      # No NODE_AUTH_TOKEN. The OIDC claim is the credential, and npm attaches provenance
+      # because of it.
+      - name: publish
+        run: |
+          bun run pack:tw2sx
+          npm publish tw2sx-*.tgz --access public
+
+      # The tarball is attached, so the release page carries the exact bytes npm served.
+      - name: github release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          gh release create "v${VERSION}" --generate-notes --title "v${VERSION}" \
+            "tw2sx-${VERSION}.tgz#tw2sx-${VERSION}.tgz"
+          rm -f tw2sx-*.tgz

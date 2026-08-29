@@ -1,11 +1,16 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 
 import { convert } from "../src/convert.ts";
 import { findConfig } from "../src/find-files.ts";
 import { loadDesignSystem, type LoadedSystem } from "../src/tailwind.ts";
+
+const tailwind3Root = path.dirname(
+  createRequire(import.meta.url).resolve("tailwindcss3/package.json"),
+);
 
 const made: string[] = [];
 
@@ -18,10 +23,7 @@ const projectWithTailwind3Installed = (files: Record<string, string>): string =>
     fs.writeFileSync(file, content);
   }
   fs.mkdirSync(path.join(dir, "node_modules"));
-  fs.symlinkSync(
-    path.resolve(import.meta.dirname, "../node_modules/tailwindcss3"),
-    path.join(dir, "node_modules/tailwindcss"),
-  );
+  fs.symlinkSync(tailwind3Root, path.join(dir, "node_modules/tailwindcss"));
   return dir;
 };
 

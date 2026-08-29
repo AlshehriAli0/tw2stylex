@@ -19,11 +19,34 @@
     "node": true
   },
   "rules": {
-    "func-style": ["error", "expression", { "allowArrowFunctions": true }],
-    "prefer-arrow-callback": ["error", { "allowNamedFunctions": false, "allowUnboundThis": false }],
-    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "func-style": [
+      "error",
+      "expression",
+      {
+        "allowArrowFunctions": true
+      }
+    ],
+    "prefer-arrow-callback": [
+      "error",
+      {
+        "allowNamedFunctions": false,
+        "allowUnboundThis": false
+      }
+    ],
+    "eqeqeq": [
+      "error",
+      "always",
+      {
+        "null": "ignore"
+      }
+    ],
     "no-var": "error",
-    "prefer-const": ["error", { "destructuring": "all" }],
+    "prefer-const": [
+      "error",
+      {
+        "destructuring": "all"
+      }
+    ],
     "object-shorthand": ["error", "always"],
     "prefer-template": "error",
     "prefer-rest-params": "error",
@@ -71,20 +94,36 @@
         "varsIgnorePattern": "^_",
         "destructuredArrayIgnorePattern": "^_",
         "ignoreRestSiblings": true,
-        "fix": { "imports": "safe-fix" }
+        "fix": {
+          "imports": "safe-fix"
+        }
       }
     ],
-
-    "complexity": ["error", { "max": 15 }],
+    "complexity": [
+      "error",
+      {
+        "max": 15
+      }
+    ],
     "max-depth": ["error", 4],
     "max-params": ["error", 4],
     "max-nested-callbacks": ["error", 3],
-    "max-lines": ["error", { "max": 400, "skipBlankLines": true, "skipComments": true }],
+    "max-lines": [
+      "error",
+      {
+        "max": 400,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
     "max-lines-per-function": [
       "error",
-      { "max": 120, "skipBlankLines": true, "skipComments": true }
+      {
+        "max": 120,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
     ],
-
     "typescript/no-explicit-any": "error",
     "typescript/no-non-null-assertion": "error",
     "typescript/no-non-null-asserted-optional-chain": "error",
@@ -95,20 +134,40 @@
     "typescript/no-misused-new": "error",
     "typescript/no-namespace": "error",
     "typescript/no-extraneous-class": "error",
-    "typescript/no-empty-object-type": ["error", { "allowInterfaces": "with-single-extends" }],
+    "typescript/no-empty-object-type": [
+      "error",
+      {
+        "allowInterfaces": "with-single-extends"
+      }
+    ],
     "typescript/no-unnecessary-type-constraint": "error",
     "typescript/no-import-type-side-effects": "error",
     "typescript/no-require-imports": "error",
     "typescript/prefer-as-const": "error",
     "typescript/prefer-namespace-keyword": "error",
-    "typescript/array-type": ["error", { "default": "array-simple" }],
+    "typescript/array-type": [
+      "error",
+      {
+        "default": "array-simple"
+      }
+    ],
     "typescript/consistent-type-definitions": ["error", "type"],
     "typescript/consistent-type-imports": [
       "error",
-      { "disallowTypeAnnotations": false, "fixStyle": "separate-type-imports" }
+      {
+        "disallowTypeAnnotations": false,
+        "fixStyle": "separate-type-imports"
+      }
     ],
     "typescript/dot-notation": "error",
-    "typescript/no-unused-vars": ["error", { "fix": { "imports": "safe-fix" } }],
+    "typescript/no-unused-vars": [
+      "error",
+      {
+        "fix": {
+          "imports": "safe-fix"
+        }
+      }
+    ],
     "typescript/explicit-function-return-type": [
       "error",
       {
@@ -117,15 +176,26 @@
         "allowHigherOrderFunctions": true
       }
     ],
-
     "typescript/await-thenable": "error",
     "typescript/no-floating-promises": "error",
     "typescript/no-misused-promises": "error",
     "typescript/no-unnecessary-type-assertion": "error",
     "typescript/no-unnecessary-boolean-literal-compare": "error",
     "typescript/no-unsafe-type-assertion": "error",
-    "typescript/no-confusing-void-expression": ["error", { "ignoreArrowShorthand": true }],
-    "typescript/prefer-nullish-coalescing": ["error", { "ignorePrimitives": { "string": true } }],
+    "typescript/no-confusing-void-expression": [
+      "error",
+      {
+        "ignoreArrowShorthand": true
+      }
+    ],
+    "typescript/prefer-nullish-coalescing": [
+      "error",
+      {
+        "ignorePrimitives": {
+          "string": true
+        }
+      }
+    ],
     "typescript/prefer-reduce-type-parameter": "error",
     "typescript/prefer-return-this-type": "error",
     "typescript/promise-function-async": "error",
@@ -134,7 +204,6 @@
     "typescript/switch-exhaustiveness-check": "error",
     "typescript/unbound-method": "error",
     "typescript/no-unnecessary-condition": "off",
-
     "import/no-cycle": "error",
     "import/no-duplicates": "error",
     "import/no-self-import": "error",
@@ -145,10 +214,8 @@
     "import/no-empty-named-blocks": "error",
     "import/no-named-as-default": "off",
     "import/no-named-as-default-member": "off",
-
     "node/no-exports-assign": "error",
     "node/no-new-require": "error",
-
     "unicorn/prefer-node-protocol": "error",
     "unicorn/prefer-array-flat-map": "error",
     "unicorn/prefer-string-slice": "error",
@@ -175,15 +242,18 @@
     "unicorn/no-null": "off",
     "unicorn/no-array-reduce": "off",
     "unicorn/no-array-for-each": "off",
-    "unicorn/filename-case": ["error", { "case": "kebabCase" }],
-
+    "unicorn/filename-case": [
+      "error",
+      {
+        "case": "kebabCase"
+      }
+    ],
     "promise/no-return-wrap": "error",
     "promise/param-names": "error",
     "promise/no-new-statics": "error",
     "promise/valid-params": "error",
     "promise/prefer-await-to-then": "error",
     "promise/always-return": "off",
-
     "oxc/no-async-await": "off",
     "oxc/bad-array-method-on-arguments": "error",
     "oxc/no-accumulating-spread": "error",
@@ -191,12 +261,12 @@
   },
   "ignorePatterns": [
     "**/node_modules/**",
-    "dist/**",
+    "**/dist/**",
     "**/*.d.ts",
-    "docs/**",
-    "skills/**",
-    "test/fixture.css",
-    "probe.mjs"
+    "**/docs/**",
+    "**/skills/**",
+    "**/test/fixture.css",
+    "**/probe.mjs"
   ],
   "overrides": [
     {
@@ -217,7 +287,11 @@
       "rules": {
         "max-lines-per-function": [
           "error",
-          { "max": 200, "skipBlankLines": true, "skipComments": true }
+          {
+            "max": 200,
+            "skipBlankLines": true,
+            "skipComments": true
+          }
         ]
       }
     }

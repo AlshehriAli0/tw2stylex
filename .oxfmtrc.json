@@ -18,12 +18,12 @@
   },
   "ignorePatterns": [
     "**/node_modules/**",
-    "dist/**",
-    "bun.lock",
-    "test/fixture.css",
-    "docs/**",
-    "skills/**",
-    "CONTEXT.md",
-    "README.md"
+    "**/dist/**",
+    "**/bun.lock",
+    "**/test/fixture.css",
+    "**/docs/**",
+    "**/skills/**",
+    "**/CONTEXT.md",
+    "**/README.md"
   ]
 }

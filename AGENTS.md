@@ -2,6 +2,16 @@
 
 TypeScript CLI codemod. No React, no JSX. Bun for running and testing, `tsc` for the build.
 
+## Layout
+
+A bun workspace. The published package is `packages/tw2sx` and holds `src`, `test` and `skills`.
+The root is private and holds the README, `assets/`, the shared lint and format config, and
+`scripts/`. Run every command from the root; `bun run check` covers the whole workspace.
+
+`scripts/pack.ts` builds the tarball, carrying the root README and LICENSE into the package and
+removing them afterwards. It is a script rather than a prepack hook because npm skips lifecycle
+scripts under `ignore-scripts`, and that failure is silent.
+
 ## Commands
 
 | Command                | What it does                                                                                                               |
@@ -11,8 +21,8 @@ TypeScript CLI codemod. No React, no JSX. Bun for running and testing, `tsc` for
 | `bun run format:check` | Fails if anything is unformatted.                                                                                          |
 | `bun run lint`         | `oxlint` — type-aware rules included (`options.typeAware` in `.oxlintrc.json`), so this needs `oxlint-tsgolint` installed. |
 | `bun run lint:fix`     | Applies only the fixes oxlint considers safe. Re-run `lint` after; most findings are not auto-fixable.                     |
-| `bun run types:check`  | `tsc --noEmit`.                                                                                                            |
-| `bun test`             | Bun test runner.                                                                                                           |
+| `bun run types:check`  | `tsc -p tsconfig.check.json` over `packages/*/src` and `scripts`.                                                          |
+| `bun test packages/`   | Bun test runner.                                                                                                           |
 
 Type-aware linting is switched on in `.oxlintrc.json` itself, not by a flag, so the CLI and the
 editor see the same errors. Do not turn `options.typeAware` off to make a run faster — it is what
