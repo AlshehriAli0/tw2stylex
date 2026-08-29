@@ -3,7 +3,7 @@
 Agent-driven Tailwind to StyleX migration. Converts what it can prove, and turns the rest into
 work an agent can pick up.
 
-<img src="https://raw.githubusercontent.com/AlshehriAli0/tailwind-2-stylex/main/assets/demo.svg" alt="tw2sx plan output" width="586">
+<img src="assets/demo.svg" alt="tw2sx plan output" width="586">
 
 No codemod finishes this job. tw2sx converts only what it can verify against the real StyleX
 compiler, which is what `MISMATCHES: 0` means, and reports the rest as typed skips.
