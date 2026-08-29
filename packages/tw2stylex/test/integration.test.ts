@@ -37,8 +37,8 @@ describe("the project design system is the source of truth", () => {
 describe("conflict order follows Tailwind, not the class attribute", () => {
   // Tailwind resolves by stylesheet order; twMerge would answer p-2 and hidden here.
   test("p-4 p-2 keeps p-4", () => {
-    expect(run("p-4 p-2").ns.padding).toBe("calc(var(--spacing) * 4)");
-    expect(run("p-2 p-4").ns.padding).toBe("calc(var(--spacing) * 4)");
+    expect(run("p-4 p-2").ns.padding).toBe("1rem");
+    expect(run("p-2 p-4").ns.padding).toBe("1rem");
   });
   test("hidden flex keeps hidden", () => {
     expect(run("hidden flex").ns.display).toBe("none");
@@ -79,7 +79,7 @@ describe("--tw-* composition chains resolve to literals", () => {
     expect(v).not.toContain("--tw-");
   });
   test("text-sm resolves its line-height fallback", () => {
-    expect(run("text-sm").ns.lineHeight).toBe("var(--text-sm--line-height)");
+    expect(run("text-sm").ns.lineHeight).toBe("calc(1.25 / 0.875)");
   });
 });
 

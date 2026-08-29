@@ -128,25 +128,39 @@ const closingParen = (value: string, open: number): number => {
   return value.length;
 };
 
-const slotValueOrFallback = (inner: string, slots: Map<string, string>): string => {
-  const [name = "", ...fallback] = splitOnTopLevelCommas(inner);
-  return slots.get(name.trim()) ?? fallback.join(",").trim();
-};
+type ResolveVar = (name: string, fallback: string) => string | undefined;
 
-const MAX_SLOT_DEPTH = 10;
+const MAX_VAR_DEPTH = 10;
 
-const fillTwSlots = (value: string, slots: Map<string, string>, depth = 0): string => {
-  if (depth > MAX_SLOT_DEPTH || !value.includes("var(--tw-")) return value;
-
-  const at = value.indexOf("var(--tw-");
-  if (at === -1) return value;
+const fillVars = (value: string, resolve: ResolveVar, depth = 0): string => {
+  const at = value.indexOf("var(--");
+  if (at === -1 || depth > MAX_VAR_DEPTH) return value;
 
   const close = closingParen(value, at + 3);
   const inner = value.slice(at + 4, close);
-  const filled = fillTwSlots(slotValueOrFallback(inner, slots), slots, depth + 1);
+  const [name = "", ...fallback] = splitOnTopLevelCommas(inner);
+  const resolved = resolve(name.trim(), fallback.join(",").trim());
+  const filled =
+    resolved === undefined
+      ? `var(${fillVars(inner, resolve, depth + 1)})`
+      : fillVars(resolved, resolve, depth + 1);
 
-  return value.slice(0, at) + filled + fillTwSlots(value.slice(close + 1), slots, depth);
+  return value.slice(0, at) + filled + fillVars(value.slice(close + 1), resolve, depth);
 };
+
+const varResolver =
+  (ds: DesignSystem, slots: Map<string, string>): ResolveVar =>
+  (name, fallback) =>
+    name.startsWith("--tw-") ? (slots.get(name) ?? fallback) : ds.themeDefault(name);
+
+const SCALED_LENGTH = /calc\((-?[\d.]+)([a-z%]*) \* (-?[\d.]+)\)/g;
+
+const foldScaledLengths = (value: string): string =>
+  value.replace(
+    SCALED_LENGTH,
+    (_m, length: string, unit: string, times: string) =>
+      `${Number((Number(length) * Number(times)).toFixed(6))}${unit}`,
+  );
 
 const QUOTED = /["']/;
 
@@ -299,7 +313,7 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
   const declarations: ResolvedClasses["declarations"] = new Map();
   const known = inTailwindOrder(ds, classNames, skips);
   const roots = parsedCssFor(ds, known);
-  const slots = twSlots(ds, roots);
+  const resolveVar = varResolver(ds, twSlots(ds, roots));
 
   const setBy = new Map<string, string>();
 
@@ -326,7 +340,7 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
       return;
     }
 
-    const filled = normaliseSpacing(fillTwSlots(decl.value, slots));
+    const filled = foldScaledLengths(normaliseSpacing(fillVars(decl.value, resolveVar)));
     if (filled.includes("var(--tw-")) {
       skips.add({
         reason: "unresolved-variable",

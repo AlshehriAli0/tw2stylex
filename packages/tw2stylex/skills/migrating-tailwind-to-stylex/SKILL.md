@@ -57,6 +57,8 @@ Then take the scaffolding back out:
 - [ ] Drop `className` and `style` DOM props from components that exposed them only so Tailwind
       callers could reach in. A `style` prop typed with `StyleXStylesWithout` stays.
 - [ ] Flip `useCSSLayers` to `true` — [setup.md](references/setup.md).
+- [ ] `grep -rn "var(--" src`: every variable still referenced is a project token, and needs a
+      home outside Tailwind's `@theme` — [tokens.md](references/tokens.md).
 - [ ] Remove `tailwindcss`, its entry CSS, and `tw2sx` from the project.
 
 ## Reading a skip

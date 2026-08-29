@@ -64,5 +64,6 @@ export const loadV3 = (req: NodeJS.Require, configPath: string): DesignSystem =>
     candidatesToCss: candidates => candidates.map(cssFor),
     getClassOrder: candidates => context.getClassOrder(candidates),
     slotDefaults: slotDefaults(context),
+    themeDefault: () => undefined,
   };
 };
