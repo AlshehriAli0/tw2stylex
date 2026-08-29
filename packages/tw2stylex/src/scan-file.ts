@@ -199,11 +199,19 @@ const jsxUsage = (
   if (conflict) skips.push(conflict);
   if (classes.length === 0 && skips.length === 0) return undefined;
 
+  const onHostElement = element !== undefined && isHostElement(element);
+  if (!onHostElement)
+    skips.push({
+      reason: "component-class-name",
+      detail: "This className is on a component, not a host element.",
+      hint: "Convert the component first, then pass a StyleX style prop instead of className.",
+    });
+
   return {
     classNames: classes,
     loc: locOf(attr),
     attributeRange: rangeOf(attr),
-    onHostElement: element ? isHostElement(element) : false,
+    onHostElement,
     kind: t.isCallExpression(expr) ? "cn-call" : "literal",
     skips,
   };

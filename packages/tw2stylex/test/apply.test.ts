@@ -233,6 +233,15 @@ describe("plan and apply agree on what converted", () => {
     for (const name of rewrittenNames) expect(names.has(name)).toBe(true);
   });
 
+  test("a custom component is skipped by both", () => {
+    const file = write("agree-component.tsx", source);
+    const planned = processFile(sys, file);
+    const applied = applyFile(sys, file, false);
+
+    expect(planned.skips.map(skip => skip.reason)).toContain("component-class-name");
+    expect([planned.converted, planned.skipped]).toEqual([applied.rewritten, applied.skipped]);
+  });
+
   test("both sides number the usages the same way", () => {
     // `plan` reports styles.el3; a user reading the report must find styles.el3 after apply.
     const file = write("agree2.tsx", source);

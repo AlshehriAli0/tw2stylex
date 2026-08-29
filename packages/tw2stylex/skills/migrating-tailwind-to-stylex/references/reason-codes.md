@@ -218,6 +218,18 @@ while unmigrated callers still pass strings. Full pattern in
 
 ---
 
+## `component-class-name` — needs-lookup
+
+A `className` is applied to a custom component rather than a host element. Spreading
+`stylex.props()` onto the component would not style the DOM it renders, so `tw2sx` leaves the
+usage in place.
+
+Convert the component first, then replace `className` with a typed StyleX `style` prop that the
+component passes to its host element. The full contract is in
+[component-api.md](./component-api.md).
+
+---
+
 ## `unknown-class` — unknown
 
 Tailwind itself does not recognise the class *in this project's design system*.

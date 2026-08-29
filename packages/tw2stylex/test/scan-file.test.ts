@@ -26,8 +26,8 @@ describe("static class strings are read whole", () => {
     expect(usage?.skips).toEqual([]);
   });
 
-  test("an empty className is not a usage at all", () => {
-    expect(scan(`<div className="" />`)).toEqual([]);
+  test.each(["div", "Card"])("an empty className on %s is not a usage at all", tag => {
+    expect(scan(`<${tag} className="" />`)).toEqual([]);
   });
 
   test("an attribute that is not className is ignored", () => {
