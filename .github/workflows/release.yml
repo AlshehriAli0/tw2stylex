@@ -1,6 +1,6 @@
 name: Release
 
-# Publishes tw2sx through npm trusted publishing: no token lives here, npm verifies the OIDC
+# Publishes tw2stylex through npm trusted publishing: no token lives here, npm verifies the OIDC
 # claim this workflow presents. That needs `id-token: write` below, npm 11.5.1 or newer, and this
 # repository plus this filename registered as the package's trusted publisher on npmjs.com.
 # Rename the file and publishing stops until npm is told the new name.
@@ -79,10 +79,10 @@ jobs:
         run: |
           git config user.name "${GITHUB_ACTOR}"
           git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
-          git commit -am "release: tw2sx v${VERSION}"
+          git commit -am "release: tw2stylex v${VERSION}"
           # Annotated and pushed by name. --follow-tags ignores a lightweight tag, which leaves
           # the remote with no tag and gh with nothing to attach a release to.
-          git tag -a "v${VERSION}" -m "tw2sx v${VERSION}"
+          git tag -a "v${VERSION}" -m "tw2stylex v${VERSION}"
           git push origin HEAD
           git push origin "v${VERSION}"
 
@@ -100,5 +100,5 @@ jobs:
           VERSION: ${{ steps.bump.outputs.version }}
         run: |
           gh release create "v${VERSION}" --generate-notes --title "v${VERSION}" \
-            "tw2sx-${VERSION}.tgz#tw2sx-${VERSION}.tgz"
+            "tw2stylex-${VERSION}.tgz#tw2stylex-${VERSION}.tgz"
           rm -f tw2stylex-*.tgz

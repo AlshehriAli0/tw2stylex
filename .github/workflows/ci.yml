@@ -59,8 +59,8 @@ jobs:
       - name: the skill ships and installs
         run: |
           cd "$RUNNER_TEMP/consumer"
-          test -f node_modules/tw2sx/README.md
-          test -f node_modules/tw2sx/LICENSE
+          test -f node_modules/tw2stylex/README.md
+          test -f node_modules/tw2stylex/LICENSE
           npx tw2sx init
           test -f .claude/skills/migrating-tailwind-to-stylex/SKILL.md
 
