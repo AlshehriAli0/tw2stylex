@@ -166,6 +166,14 @@ describe("an element with two styling sources cannot take a props spread", () =>
   test("className alone is fine", () => {
     expect(reasonsIn(`<div className="flex" />`)).toEqual([]);
   });
+
+  // The spread's own className overwrites an attribute written before it, or is overwritten by
+  // one written after. Either way one of the two is silently gone.
+  test("a className beside a stylex.props() spread is a second styling source", () => {
+    const usage = first(`<div {...stylex.props(styles.a)} className="p-4" />`);
+    expect(usage?.skips.map(s => s.reason)).toEqual(["two-style-sources"]);
+    expect(usage?.skips[0]?.hint).toContain("stylex.props(styles.a, styles.b)");
+  });
 });
 
 describe("where the StyleX import may go", () => {

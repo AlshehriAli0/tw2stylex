@@ -246,9 +246,17 @@ different, so a near-miss guess ships a design change.
 
 ## `two-style-sources` — check-first
 
-The element carries both a `className` and its own `style` attribute. StyleX's
-`no-two-style-sources` rule forbids an element having a `stylex.props()` spread alongside either
-one — whichever is written second wins and the other silently does nothing.
+The element carries a `className` beside its own `style` attribute, or beside a
+`stylex.props()` spread that is already there.
+
+Beside an existing spread, add the styles to that call: `stylex.props(styles.a, styles.b)`. A
+class that is not Tailwind — `next/font`'s `inter.variable`, a class a markdown pipeline emits —
+is joined onto the spread's own output, so the element still has one `className`:
+
+```tsx
+const sx = stylex.props(styles.body);
+<body className={`${sx.className ?? ''} ${inter.variable}`} style={sx.style} />
+```
 
 If the inline style is static, fold it into the style. If it is genuinely dynamic, use a
 dynamic style function and pass it through `stylex.props` so there is still only one source:

@@ -226,6 +226,10 @@ describe("apply refuses everything it cannot rewrite safely", () => {
       `export const A = ({ tone }) => <div className={cn("flex p-4", TONE_BOX[tone])} />;`,
     ],
     ["no classes at all", `export const A = () => <div id="x" />;`],
+    [
+      "a className beside a stylex.props() spread",
+      `import * as stylex from '@stylexjs/stylex';\nconst s = stylex.create({ a: { display: 'flex' } });\nexport const A = () => <div {...stylex.props(s.a)} className="p-4" />;`,
+    ],
   ])("%s is left in place", (_name, code) => {
     const file = write(`refuse-${_name.replace(/\W+/g, "-")}.tsx`, `${code}\n`);
     const before = fs.readFileSync(file, "utf8");

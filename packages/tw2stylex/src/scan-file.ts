@@ -194,7 +194,19 @@ const tagOf = (element: t.JSXOpeningElement | undefined): string | undefined =>
 const elementName = (element: t.JSXOpeningElement | undefined): string | undefined =>
   stringAttribute(element, "id") ?? stringAttribute(element, "aria-label") ?? tagOf(element);
 
-const styleAttrSkip = (element: t.JSXOpeningElement | undefined): Skip | undefined => {
+const spreadsStylexProps = (attr: t.JSXAttribute | t.JSXSpreadAttribute): boolean =>
+  t.isJSXSpreadAttribute(attr) &&
+  t.isCallExpression(attr.argument) &&
+  calleeName(attr.argument.callee) === "props";
+
+const secondStyleSource = (element: t.JSXOpeningElement | undefined): Skip | undefined => {
+  const stylexSpread = element?.attributes.find(spreadsStylexProps);
+  if (stylexSpread)
+    return {
+      reason: "two-style-sources",
+      detail: `This element already spreads stylex.props() (line ${locOf(stylexSpread).line}); a className beside it is overwritten or overwrites it.`,
+      hint: "Add these styles to that stylex.props() call instead: stylex.props(styles.a, styles.b).",
+    };
   const styleAttr = attributeNamed(element, "style");
   if (!styleAttr) return undefined;
   return {
@@ -229,8 +241,8 @@ const jsxUsage = (
   if (!expr) return undefined;
 
   const { classes, skips } = readClasses(expr);
-  const styleAttr = styleAttrSkip(element);
-  if (styleAttr) skips.push(styleAttr);
+  const second = secondStyleSource(element);
+  if (second) skips.push(second);
   if (classes.length === 0 && skips.length === 0) return undefined;
 
   const onComponent = componentSkip(element);
