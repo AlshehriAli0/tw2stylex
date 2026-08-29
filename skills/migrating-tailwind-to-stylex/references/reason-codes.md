@@ -91,7 +91,8 @@ than `createTheme`.
 ## `descendant-selector` — needs-lookup
 
 `[&_svg]:size-4`, `[&>*]:p-2`, `[&_svg:not([class*='size-'])]:size-4`. StyleX styles one element
-and hard-errors on descendant selectors. There is no escape hatch.
+and hard-errors on descendant selectors. Style the child directly, or when the rule genuinely
+needs to reach across elements, move it to a CSS Module beside the component.
 
 **Placeholder to find:** the child. Style it directly.
 

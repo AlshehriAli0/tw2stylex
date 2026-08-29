@@ -20,24 +20,44 @@ Pixels stay identical. A style you cannot convert stays in the file and goes int
       file's frontmatter differs from `tw2sx --version`: the copy you are reading came from an
       older tw2sx and may name reasons or a fix order the tool no longer uses.
 - [ ] 1. StyleX installed and proven to render — [setup.md](references/setup.md). Once per project.
-- [ ] 2. `tw2sx plan <path>` — writes a report, edits nothing.
-- [ ] 3. Read `MISMATCHES`. **At 0, continue. Above 0, stop and tell the user** —
+- [ ] 2. Tokens and shared primitives in place before any component converts —
+      [tokens.md](references/tokens.md). Every component references them, so converting first
+      means converting twice.
+- [ ] 3. `tw2sx plan <path>` — writes a report, edits nothing.
+- [ ] 4. Read `MISMATCHES`. **At 0, continue. Above 0, stop and tell the user** —
       the tool generated StyleX that does not match Tailwind, which is a tw2sx bug.
-- [ ] 4. Fix skips in fix order: every `safe`, then every `needs-lookup`, then every
+- [ ] 5. Fix skips in fix order: every `safe`, then every `needs-lookup`, then every
       `check-first`, then every `unknown`.
-- [ ] 5. `tw2sx plan <path>` again. Continue only when the skip count dropped and mismatches
+- [ ] 6. `tw2sx plan <path>` again. Continue only when the skip count dropped and mismatches
       are still 0.
-- [ ] 6. Repeat from 4 until every remaining skip is one you can name a reason for keeping.
-- [ ] 7. Run the project's own typecheck and build. Both clean.
-- [ ] 8. Load a page you changed and read one converted element's computed styles.
-      Typechecking proves the code is valid; only this proves it still renders.
-- [ ] 9. Summarise: usages converted, skips resolved, and each skip you kept with why.
+- [ ] 7. Repeat from 5 until every remaining skip is one you can name a reason for keeping.
+- [ ] 8. Run the project's own typecheck and build. Both clean.
+- [ ] 9. Load a page you changed and read one converted element's computed styles. This
+      confirms StyleX is wired up and the styles arrive. `plan` already proved the conversion
+      declaration by declaration, so spend the look on what you wrote by hand: hover states,
+      dark mode, anything conditional.
+- [ ] 10. Summarise: usages converted, skips resolved, and each skip you kept with why.
 
 `tw2sx explain "<classes>"` prints the exact StyleX object for any class string and whether it
 verified. Reach for it whenever you are about to write a value from memory.
 
 Migrate **leaves first** — a component only after the components it renders. A StyleX child
 inside a Tailwind parent is where cascade surprises live.
+
+Watch the total, not only the skips. `tw2sx plan` over the whole source tree gives one usage
+count; if it rises between sessions, Tailwind is still being written faster than you remove it.
+
+## Finishing
+
+The loop above runs per directory. The migration ends when that whole-tree count reaches zero.
+Then take the scaffolding back out:
+
+- [ ] Delete every `customClassName` bridge. Each surviving one is a Tailwind class still in
+      the build — [component-api.md](references/component-api.md).
+- [ ] Drop `className` and `style` DOM props from components that exposed them only so Tailwind
+      callers could reach in. A `style` prop typed with `StyleXStylesWithout` stays.
+- [ ] Flip `useCSSLayers` to `true` — [setup.md](references/setup.md).
+- [ ] Remove `tailwindcss`, its entry CSS, and `tw2sx` from the project.
 
 ## Reading a skip
 
@@ -116,6 +136,10 @@ wrapping its name in a `defineVars` token.
 
 Descendant and child selectors are the one loud failure: `{'> *': …}` throws
 `Invalid pseudo or at-rule.` at build time.
+
+When a rule genuinely needs the cascade — a global selector, restyling a third-party component,
+an `@font-face` — put it in a **CSS Module beside the component**. Scoped, explicit, greppable
+later. That is the sanctioned escape hatch; record each use in your summary.
 
 ## What good output looks like
 

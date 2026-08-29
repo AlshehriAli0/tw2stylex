@@ -3,6 +3,11 @@
 For components that accept styling from callers, and for `cva`. Reached from
 `passed-in-classes`, `variant-function`, and the overwriting rule in SKILL.md.
 
+**Styling at a distance should fail to compile.** Tailwind made it free to reach into a
+component from outside and restyle it, so codebases grow thousands of those reaches. Convention
+will not hold them back. Every rule below moves the boundary into the type system, where the
+call site errors instead of the pixel quietly changing.
+
 ## Ban the properties the component owns
 
 A component's `style` prop is typed with `StyleXStylesWithout`, listing every property the
@@ -37,8 +42,7 @@ Two details that fail to compile if you get them wrong:
   StyleX's `NotUndefined` constraint.
 - `Omit<…, 'style'>` on the DOM props, or React's `CSSProperties` collides with the StyleX prop.
 
-Callers who need an owned property go through a variant. That friction is the point — restyling
-components through wrappers is the habit this migration ends.
+Callers who need an owned property go through a variant.
 
 ## Caller styles keep their place
 
@@ -77,3 +81,12 @@ the first. Layering is what wipes the conditions.
 
 `tw2sx` converts cva mechanically and names styles from the axis and value. Plain JSX usages
 get `el1`, `el2` placeholders — rename those to what the element is while you review the file.
+
+## Advertise only what you apply
+
+A component that accepts a `style` prop must merge it, after its own styles, onto the element a
+caller would expect to hit. Taking the prop and dropping it is worse than not taking it: the
+caller's styles vanish with no error, and the type signature said they would work.
+
+The same goes the other way. A `size` or `variant` prop the component only half-applies teaches
+callers a contract it does not keep. One styling interface per component, honoured completely.
