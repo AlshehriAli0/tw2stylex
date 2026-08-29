@@ -79,11 +79,9 @@ For **compound variants**, StyleX's docs say to pre-flatten the combination into
 style (`colorVariantsDisabled`) and select it, rather than layering a second style over
 the first. Layering is what wipes the conditions.
 
-`tw2sx` converts cva mechanically and names styles from the axis and value. Plain JSX usages
-are named after the element's `id`, `aria-label` or tag — rename tag names to what the element
-is while you review the file.
+`tw2sx` converts cva mechanically and names styles from the axis and value.
 
-### Branch on the variant, do not look it up
+### Branch on the variant
 
 When every variant value is known and nothing else about the style is dynamic, write one
 `stylex.props` call per branch:
@@ -96,11 +94,10 @@ const variantProps = variant === 'ghost'
 return <button {...props} {...variantProps} />;
 ```
 
-`variants[variant]` gives the same CSS, but the compiler cannot fold a lookup, so the style
-objects and a runtime `stylex.props` call stay in the bundle. Static branches compile away.
-Three or more values: a `switch` with one `stylex.props` call per case. If the component
-already takes a runtime `style` prop, the runtime path exists anyway — use whichever reads
-better.
+Static branches compile away to literal class strings; a lookup like `variants[variant]` gives
+the same CSS but keeps the style objects and a runtime `stylex.props` call in the bundle. Three
+or more values: a `switch` with one `stylex.props` call per case. If the component already
+takes a runtime `style` prop, the runtime path exists anyway — use whichever reads better.
 
 ## Advertise only what you apply
 

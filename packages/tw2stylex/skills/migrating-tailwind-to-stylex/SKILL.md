@@ -57,8 +57,8 @@ Then take the scaffolding back out:
 - [ ] Drop `className` and `style` DOM props from components that exposed them only so Tailwind
       callers could reach in. A `style` prop typed with `StyleXStylesWithout` stays.
 - [ ] Flip `useCSSLayers` to `true` — [setup.md](references/setup.md).
-- [ ] `grep -rn "var(--" src`: every variable still referenced is a project token, and needs a
-      home outside Tailwind's `@theme` — [tokens.md](references/tokens.md).
+- [ ] `grep -rn "var(--" src`: each variable it finds is a project token. Done when every one
+      is defined outside Tailwind's `@theme` — [tokens.md](references/tokens.md).
 - [ ] Remove `tailwindcss`, its entry CSS, and `tw2sx` from the project.
 
 ## Reading a skip
@@ -149,7 +149,7 @@ The tool is correct, not tasteful. Three things it leaves for you, worth doing a
 each file rather than in a pass of their own:
 
 - **Rename the guessed names.** A style is named after its element's `id`, then `aria-label`,
-  then tag: `billing`, `saveBilling`, `div2`. A tag names the tag, not the part — call it what
+  then tag: `billing`, `saveBilling`, `div2`. A tag-derived name says where, so call it what
   the element is: `card`, `label`, `icon`.
 - **Keep styles beside their markup.** Co-location is the point of StyleX; resist collecting a
   file's styles into a shared module.
