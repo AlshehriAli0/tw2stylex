@@ -33,9 +33,8 @@ export default defineConfig({
 });
 ```
 
-Import the adapter for your bundler — `@stylexjs/unplugin/vite`, `/webpack`, `/rspack`,
-`/esbuild`, `/rollup` — not the package root, which loads every adapter. All take the same
-options. **Next.js** needs `babel.config.js` plus `postcss.config.js` — copy them from the
+Each bundler has its own adapter — `@stylexjs/unplugin/vite`, `/webpack`, `/rspack`,
+`/esbuild`, `/rollup` — with the same options; the package root loads all of them at once. **Next.js** needs `babel.config.js` plus `postcss.config.js` — copy them from the
 installation doc linked above rather than from memory.
 
 **Vitest** — a separate `vitest.config.ts` replaces `vite.config.ts`, and each entry in
@@ -102,8 +101,7 @@ it has one) and look at the output:
 - If the app has SSR, one production render completes without a StyleX runtime error.
 
 A passing typecheck only proves `@stylexjs/stylex` is installed. The CSS file proves the compiler
-ran; the JavaScript and SSR checks prove it ran in every build. Use the project's own build
-commands and output directories.
+ran; the JavaScript and SSR checks prove it ran in every build.
 
 ## When styles do not appear
 
