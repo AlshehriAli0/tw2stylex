@@ -53,6 +53,20 @@ const writeSkill = (destination: string, name: string, stamp: string): void => {
   fs.writeFileSync(entry, stampVersion(fs.readFileSync(entry, "utf8"), stamp));
 };
 
+export const ignoreReports = (projectRoot: string): void => {
+  const file = path.join(projectRoot, ".gitignore");
+  const current = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+  const alreadyIgnored = current.split("\n").some(line => /^\.tw2sx\/?$/.test(line.trim()));
+  if (alreadyIgnored) return;
+  const onItsOwnLine = current === "" || current.endsWith("\n") ? "" : "\n";
+  fs.writeFileSync(file, `${current}${onItsOwnLine}.tw2sx/\n`);
+};
+
+export const installedSkills = (projectRoot: string): string[] =>
+  homesPresent(projectRoot)
+    .map(home => path.join(home, "skills", skillName(), "SKILL.md"))
+    .filter(skill => fs.existsSync(path.join(projectRoot, skill)));
+
 export type Installed = { destinations: string[]; files: string[]; version: string };
 
 export const installSkill = (projectRoot: string, homes: string[]): Installed => {

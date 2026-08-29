@@ -14,13 +14,13 @@ import {
 import { isRecord } from "./cjs.ts";
 import { bold, cyan, dim, FIX_COLOR, green } from "./color.ts";
 import { convert, warmUp } from "./convert.ts";
-import { printCreate } from "./css-to-stylex.ts";
+import { printCreate, type Style } from "./css-to-stylex.ts";
 import { EXIT, fail, type Failure } from "./fail.ts";
 import { collectFiles, findConfig, findEntryCss } from "./find-files.ts";
-import { AGENT_HOMES, homesPresent, installSkill } from "./init.ts";
+import { AGENT_HOMES, homesPresent, ignoreReports, installSkill, installedSkills } from "./init.ts";
 import { plan } from "./plan.ts";
 import { paintSkip, renderReport, toSkipLine, took, type Report, type SkipLine } from "./report.ts";
-import { loadDesignSystem } from "./tailwind.ts";
+import { loadDesignSystem, type LoadedSystem } from "./tailwind.ts";
 
 export type CommandResult = { exit: number } | Failure;
 
@@ -83,23 +83,29 @@ const requireExistingPath = (target: string | undefined, usage: string): string 
   return target;
 };
 
+const readTheSkill = (root = process.cwd()): string => {
+  const skill = installedSkills(root)[0];
+  return skill === undefined
+    ? `${dim("Skill:")} run ${cyan("tw2sx init")}, then read the SKILL.md it writes in full before working the skips.`
+    : `${dim("Skill:")} read ${cyan(skill)} in full before working the skips.`;
+};
+
+const homesToWrite = (args: Args, root: string): string[] => {
+  const present = homesPresent(root);
+  const every = flagWasPassed(args, "all") || present.length === 0;
+  return every ? AGENT_HOMES.map(h => h.home) : present;
+};
+
 export const initCommand = (args: Args, out: Output): CommandResult => {
   const root = process.cwd();
-  const homes = flagWasPassed(args, "all") ? AGENT_HOMES.map(h => h.home) : homesPresent(root);
-
-  if (homes.length === 0)
-    return fail(
-      "E_NO_AGENT_HOME",
-      EXIT.NOT_READY,
-      `No agent directory in ${root}: looked for ${AGENT_HOMES.map(h => h.home).join(" and ")}.`,
-      `Create the one your agent reads, then re-run. ${AGENT_HOMES.map(h => `${h.home} for ${h.agents}`).join("; ")}. To write both, pass --all.`,
-    );
-
-  const installed = installSkill(root, homes);
+  const installed = installSkill(root, homesToWrite(args, root));
+  ignoreReports(root);
   if (out.json) emit(installed);
   else {
     console.log(`tw2sx ${installed.version}: skill installed`);
     for (const destination of installed.destinations) console.log(`  ${destination}`);
+    console.log(`  .gitignore ignores ${dim(".tw2sx/")}`);
+    console.log(`\n${readTheSkill(root)}`);
   }
   return { exit: EXIT.NOTHING_SKIPPED };
 };
@@ -198,7 +204,7 @@ export const planCommand = async (args: Args, out: Output): Promise<CommandResul
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
 
   if (out.json) emit(summarise(report, out.fields));
-  else console.log(renderReport(report, out.limit, reportPath, elapsedMs));
+  else console.log(`${renderReport(report, out.limit, reportPath, elapsedMs)}\n${readTheSkill()}`);
 
   return { exit: planExit(report) };
 };
