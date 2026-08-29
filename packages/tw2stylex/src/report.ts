@@ -80,9 +80,12 @@ const countByFixAndReason = (skips: SkipLine[]): Map<Fix, Map<string, number>> =
   return counts;
 };
 
-const breakdown = (skips: SkipLine[]): string[] => {
+const breakdown = (skips: SkipLine[], usages: number): string[] => {
   const counts = countByFixAndReason(skips);
-  const lines: string[] = ["", "Skipped, in the order to work them:"];
+  const lines: string[] = [
+    "",
+    `Skipped classes (${skips.length} in ${usages} usages), in the order to work them:`,
+  ];
   for (const fix of WORK_ORDER) {
     const rows = [...(counts.get(fix) ?? [])].sort((a, b) => b[1] - a[1]);
     if (rows.length === 0) continue;
@@ -101,11 +104,12 @@ export const paintSkip = (s: SkipLine): string => {
   );
 };
 
-const skipSection = (skips: SkipLine[], limit: number): string[] => {
+const skipSection = (skips: SkipLine[], usages: number, limit: number): string[] => {
   if (skips.length === 0) return [];
   const shown = skips.slice(0, limit).map(paintSkip);
-  const elided = skips.length > limit ? [`\nShowing ${limit} of ${skips.length} skipped.`] : [];
-  return ["", ...shown, ...elided, ...breakdown(skips)];
+  const elided =
+    skips.length > limit ? [`\nShowing ${limit} of ${skips.length} skipped classes.`] : [];
+  return ["", ...shown, ...elided, ...breakdown(skips, usages)];
 };
 
 const nextStep = (skips: SkipLine[], reportPath: string | undefined): string[] => {
@@ -137,7 +141,7 @@ export const renderReport = (
     `${bold(String(files))} files · ${bold(String(usages))} usages · ` +
       `${green(bold(String(converted)))} converted · ${countOf(skipped)} skipped${elapsed}`,
     ...mismatchSection(report, limit),
-    ...skipSection(skips, limit),
+    ...skipSection(skips, skipped, limit),
     ...nextStep(skips, reportPath),
   ].join("\n");
 };

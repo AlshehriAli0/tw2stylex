@@ -5,7 +5,7 @@
 <text y="58"><tspan x="20.0" font-weight="600" fill="#c9d1d9">21</tspan><tspan x="36.8" fill="#c9d1d9"> files · </tspan><tspan x="112.4" font-weight="600" fill="#c9d1d9">69</tspan><tspan x="129.2" fill="#c9d1d9"> usages · </tspan><tspan x="213.2" font-weight="600" fill="#4ade80">23</tspan><tspan x="230.0" fill="#c9d1d9"> converted · </tspan><tspan x="339.2" font-weight="600" fill="#fbbf24">46</tspan><tspan x="356.0" fill="#c9d1d9"> skipped</tspan><tspan x="423.2" opacity="0.55" fill="#c9d1d9"> · 216ms</tspan></text>
 <text y="77"><tspan x="20.0" fill="#4ade80">MISMATCHES: 0</tspan></text>
 <text y="96"></text>
-<text y="115"><tspan x="20.0" fill="#c9d1d9">Skipped, in the order to work them:</tspan></text>
+<text y="115"><tspan x="20.0" fill="#c9d1d9">Skipped classes (74 in 46 usages), in the order to work them:</tspan></text>
 <text y="134"><tspan x="20.0" fill="#c9d1d9">  </tspan><tspan x="36.8" fill="#4ade80">safe</tspan></text>
 <text y="153"><tspan x="20.0" fill="#c9d1d9">    </tspan><tspan x="53.6" opacity="0.55" fill="#c9d1d9">marker-class          </tspan><tspan x="238.4" fill="#c9d1d9"> </tspan><tspan x="246.8" font-weight="600" fill="#c9d1d9">   7</tspan></text>
 <text y="172"><tspan x="20.0" fill="#c9d1d9">  </tspan><tspan x="36.8" fill="#60a5fa">needs-lookup</tspan></text>
