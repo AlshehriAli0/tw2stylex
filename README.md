@@ -54,7 +54,8 @@ Each one says what stopped it, and how much work it will be:
 | `unknown` | investigate; often not a Tailwind class at all |
 
 There are 18 reasons. [reason-codes.md] walks through each one. [tokens.md] covers `@theme`
-tokens and dark mode.
+tokens and dark mode. [css-size.md] lists what makes the stylesheet bigger than it needs to be,
+and the fix for each.
 
 ## For agents
 
@@ -88,4 +89,5 @@ mismatches, 809ms. Node and Bun produce identical output.
 [SKILL.md]: skills/migrating-tailwind-to-stylex/SKILL.md
 [reason-codes.md]: skills/migrating-tailwind-to-stylex/references/reason-codes.md
 [tokens.md]: skills/migrating-tailwind-to-stylex/references/tokens.md
+[css-size.md]: skills/migrating-tailwind-to-stylex/references/css-size.md
 [component-api.md]: skills/migrating-tailwind-to-stylex/references/component-api.md

@@ -25,7 +25,7 @@ Converts a usage only when it can prove the CSS comes out the same as Tailwind p
 Everything else it SKIPS and lists, with a reason and how to fix it.
 
 COMMANDS  (nothing writes unless you say --write)
-  tw2stylex init                   Set this repo up for your agent. Writes to its agent dirs, or both if none.
+  tw2stylex init                   Set this repo up for your agent, and turn on useCSSLayers for Tailwind 4.
   tw2stylex explain "<classes>"    Show the StyleX for a class string, and whether it checks out.
   tw2stylex plan <path>            Convert + check a folder. Writes a JSON report.
   tw2stylex skipped <report.json>  Re-read a report, filtered.

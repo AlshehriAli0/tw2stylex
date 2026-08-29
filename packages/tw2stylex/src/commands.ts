@@ -20,6 +20,12 @@ import { collectFiles, findConfig, findEntryCss } from "./find-files.ts";
 import { AGENT_HOMES, homesPresent, ignoreReports, installSkill, installedSkills } from "./init.ts";
 import { plan } from "./plan.ts";
 import { paintSkip, renderReport, toSkipLine, took, type Report, type SkipLine } from "./report.ts";
+import {
+  checkEntryOrder,
+  describeEntry,
+  describeLayers,
+  enableCssLayers,
+} from "./stylex-config.ts";
 import { loadDesignSystem, type LoadedSystem } from "./tailwind.ts";
 
 export type CommandResult = { exit: number } | Failure;
@@ -100,11 +106,16 @@ export const initCommand = (args: Args, out: Output): CommandResult => {
   const root = process.cwd();
   const installed = installSkill(root, homesToWrite(args, root));
   ignoreReports(root);
-  if (out.json) emit(installed);
+  const layers = enableCssLayers(root);
+  const entry = checkEntryOrder(root);
+  if (out.json) emit({ ...installed, layers, entry });
   else {
     console.log(`tw2stylex ${installed.version}: skill installed`);
     for (const destination of installed.destinations) console.log(`  ${destination}`);
     console.log(`  .gitignore ignores ${dim(".tw2stylex/")}`);
+    console.log(`  ${describeLayers(layers)}`);
+    const order = describeEntry(entry);
+    if (order !== undefined) console.log(`  ${order}`);
     console.log(`\n${readTheSkill(root)}`);
   }
   return { exit: EXIT.NOTHING_SKIPPED };

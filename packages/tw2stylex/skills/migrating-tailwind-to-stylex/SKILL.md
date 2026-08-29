@@ -3,8 +3,8 @@ name: migrating-tailwind-to-stylex
 description: >-
   Migrates Tailwind to StyleX with the tw2stylex CLI, then hand-resolves what it skips. Read in
   full before the first tw2stylex command. Use when moving code off Tailwind, when a tw2stylex report
-  or skip is in front of you, when installing StyleX into a build, or when writing StyleX
-  styles by hand.
+  or skip is in front of you, when installing StyleX into a build, when writing StyleX
+  styles by hand, or when the CSS bundle grew after converting.
 ---
 
 # Migrating Tailwind to StyleX
@@ -29,6 +29,8 @@ Pixels stay identical.
       They are the model this skill assumes; every rule below is a corollary. Done when you can
       say, without looking, why StyleX has no descendant selectors.
 - [ ] 2. StyleX installed and proven to render — [setup.md](references/setup.md). Once per project.
+      Then `tw2stylex init` again, now that it can see the plugin. Done when it reports
+      `useCSSLayers` set, or names the reason it left it off.
 - [ ] 3. Tokens and shared primitives in place before any component converts —
       [tokens.md](references/tokens.md). Every component references them, so converting first
       means converting twice.
@@ -78,6 +80,8 @@ Then take the scaffolding back out:
 - [ ] `grep -rn "var(--" src`: each variable it finds is a project token. Done when every one
       is defined outside Tailwind's `@theme` — [tokens.md](references/tokens.md).
 - [ ] Remove `tailwindcss`, its entry CSS, and `tw2stylex` from the project.
+- [ ] Measure the production CSS, gzipped, against the last Tailwind commit. Done when it is
+      no larger, or when each cause in [css-size.md](references/css-size.md) is fixed or ruled out.
 
 ## Reading a skip
 
@@ -188,10 +192,11 @@ file rather than in a pass of their own:
   Before adding a style by hand, look for the entry that already says it and point the element
   at that.
 - **Keep styles beside their markup.** An exported `stylex.create` cannot be dead-code
-  eliminated, so every unused style in a shared styles module ships as CSS forever. That is
-  nearly always why a migration ends with *more* CSS than the Tailwind it replaced.
-- **Reach for a token before a literal.** A repeated `16` that the project already spells
-  `spacing.medium` should say so — see [tokens.md](references/tokens.md).
+  eliminated, so every unused style in a shared styles module ships as CSS forever. A
+  namespace per element in the file that renders it costs no CSS — [css-size.md](references/css-size.md).
+- **Reach for a token before a literal, and the codemod's literal before your own.** A repeated
+  value the project already spells `spacing.medium` should say so; a hand-written value takes
+  the form the codemod emits — "Match the literal" in [tokens.md](references/tokens.md).
 
 ## References
 
@@ -202,8 +207,10 @@ file rather than in a pass of their own:
 - [tokens.md](references/tokens.md) — `@theme` → StyleX tokens, the `--` variable bridge, dark
   mode. Read it before touching tokens or theming.
 - [setup.md](references/setup.md) — installing StyleX, wiring the build, the CSS entrypoint,
-  `useCSSLayers`, proving it renders. Read it before the first conversion in a project, or when
-  a converted component renders unstyled.
+  `useCSSLayers`, the production config, proving it renders. Read it before the first
+  conversion in a project, or when a converted component renders unstyled.
+- [css-size.md](references/css-size.md) — how to measure, and the ranked causes of a bigger
+  bundle with their fixes. Read it when the CSS grew, and for the measurement step in Finishing.
 
 The three pages from step 1 are the authority. Fetch them again for any API this skill does not
 cover, and to check a rule here that looks wrong.

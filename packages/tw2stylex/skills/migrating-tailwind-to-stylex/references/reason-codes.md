@@ -67,7 +67,7 @@ The element matches only under some ancestor — most often class-based dark mod
 compiles to `&:is(.dark *)`.
 
 **Dark mode:** pick the mechanism under "Dark mode" in [tokens.md](./tokens.md), then the component
-references one token unconditionally and the pair of classes collapses into it.
+references one token unconditionally and the pair of classes collapses into one atom.
 
 **Any other ancestor state:** `stylex.when.ancestor()` with a marker, as in `sibling-state`.
 

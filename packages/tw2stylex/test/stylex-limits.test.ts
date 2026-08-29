@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { createRequire } from "node:module";
 
 import { compileStyleX } from "../src/check.ts";
+import { requireExport } from "../src/cjs.ts";
 import { BANNED_SHORTHANDS } from "../src/classes-to-css.ts";
 
 /**
@@ -112,5 +114,49 @@ describe("the failures the skill calls silent are the ones that are silent", () 
     expect(dynamic.rules).toEqual(finite.rules);
     expect(dynamic.code).toContain("stylex.props");
     expect(finite.code).not.toContain("stylex.props");
+  });
+});
+
+describe("the CSS-size claims in css-size.md hold for this StyleX", () => {
+  const rulesOf = (source: string) => {
+    const r = compileStyleX(source);
+    return "error" in r ? [] : r.rules;
+  };
+
+  test("a namespace's name is not part of the atom hash, so one per element is free", () => {
+    const rules = rulesOf(
+      `const styles = stylex.create({ card: { padding: '1rem' }, div2: { padding: '1rem' } });`,
+    );
+    expect(rules).toHaveLength(1);
+  });
+
+  test("the value string is the atom key: '1rem' and 16 are two rules, '0px' and 0 are one", () => {
+    const drift = rulesOf(
+      `const styles = stylex.create({ a: { padding: '1rem' }, b: { padding: 16 } });`,
+    );
+    const zero = rulesOf(
+      `const styles = stylex.create({ a: { padding: '0px' }, b: { padding: 0 } });`,
+    );
+    expect(new Set(drift.map(r => r.className)).size).toBe(2);
+    expect(new Set(zero.map(r => r.className)).size).toBe(1);
+  });
+
+  test("without layers the priority polyfill appends :not(#\\#) to rules", () => {
+    const plugin: unknown = createRequire(import.meta.url)("@stylexjs/babel-plugin");
+    const { processStylexRules } = requireExport(
+      plugin,
+      "processStylexRules",
+      "@stylexjs/babel-plugin",
+    );
+    if (typeof processStylexRules !== "function") throw new Error("processStylexRules missing");
+    const rules = rulesOf(
+      `const styles = stylex.create({ t: { padding: '1rem', paddingTop: 0, color: { default: 'red', ':hover': 'blue' } } });`,
+    ).map(r => [r.className, { ltr: r.css, rtl: null }, r.priority]);
+
+    const unlayered = String(processStylexRules(rules, false));
+    const layered = String(processStylexRules(rules, true));
+    expect(unlayered).toContain(":not(#\\#)");
+    expect(layered).not.toContain(":not(#\\#)");
+    expect(layered).toContain("@layer priority");
   });
 });
