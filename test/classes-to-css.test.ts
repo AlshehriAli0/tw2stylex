@@ -173,3 +173,48 @@ describe("declarations are keyed by condition, last class wins within one", () =
     expect(declarations.size).toBeGreaterThan(1);
   });
 });
+
+/**
+ * StyleX gives a longhand ID-level specificity (`.x:not(#\#)`), so it outranks a shorthand that
+ * only applies under a condition. Tailwind resolves the same pair by stylesheet order, where the
+ * conditional utility wins. The declaration sets match, so only this check catches the divergence.
+ */
+describe("a conditional shorthand that a longhand would beat", () => {
+  test("is skipped rather than reported as converted", () => {
+    const out = convert(sys.ds, "s", ["p-4", "pt-2", "hover:p-8"]);
+    expect(out.skips.map(s => s.reason)).toEqual(["shorthand-beaten-by-longhand"]);
+    expect(out.style).toBeUndefined();
+  });
+
+  test("the skip names both classes and both properties", () => {
+    const [skip] = convert(sys.ds, "s", ["p-4", "pt-2", "hover:p-8"]).skips;
+    expect(skip?.class).toBe("hover:p-8");
+    expect(skip?.detail).toContain("pt-2");
+    expect(skip?.detail).toContain("paddingTop");
+  });
+
+  test("one class can beat itself across its own condition", () => {
+    expect(convert(sys.ds, "s", ["outline-hidden"]).skips.map(s => s.reason)).toEqual([
+      "shorthand-beaten-by-longhand",
+    ]);
+  });
+
+  test("a shorthand and longhand with no condition between them still converts", () => {
+    expect(convert(sys.ds, "s", ["p-4", "pt-2"]).style).toEqual({
+      padding: "calc(var(--spacing) * 4)",
+      paddingTop: "calc(var(--spacing) * 2)",
+    });
+  });
+
+  test("a longhand carrying the same condition still converts", () => {
+    expect(convert(sys.ds, "s", ["p-4", "hover:pt-8"]).skips).toEqual([]);
+  });
+
+  test("a conditional shorthand with no longhand beside it still converts", () => {
+    expect(convert(sys.ds, "s", ["p-4", "hover:p-8"]).skips).toEqual([]);
+  });
+
+  test("an unrelated longhand does not trip it", () => {
+    expect(convert(sys.ds, "s", ["p-4", "hover:p-8", "mt-2"]).skips).toEqual([]);
+  });
+});

@@ -1,5 +1,6 @@
 import postcss, { type AtRule, type Declaration, type Rule } from "postcss";
 
+import { beatenShorthands } from "./shorthands.ts";
 import { newSkips, type Skip, type Skips } from "./skip.ts";
 import type { DesignSystem } from "./tailwind.ts";
 
@@ -300,11 +301,19 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
   const roots = parsedCssFor(ds, known);
   const slots = twSlots(ds, roots);
 
-  const record = (path: ConditionPath, property: string, value: string): void => {
+  const setBy = new Map<string, string>();
+
+  const record = (
+    path: ConditionPath,
+    property: string,
+    value: string,
+    className: string,
+  ): void => {
     const key = conditionKey(path);
     const group = declarations.get(key) ?? { path, props: new Map<string, string>() };
     declarations.set(key, group);
     group.props.set(property, value);
+    setBy.set(`${key}|${property}`, className);
   };
 
   const addDeclaration = (path: ConditionPath, decl: Declaration, className: string): void => {
@@ -334,7 +343,7 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
     const nothingToWrite = value === "";
     if (nothingToWrite) return;
 
-    record(path, camel(decl.prop), value);
+    record(path, camel(decl.prop), value, className);
   };
 
   const walk = (node: postcss.Container, path: ConditionPath, className: string): void => {
@@ -374,6 +383,8 @@ export const resolveClasses = (ds: DesignSystem, classNames: string[]): Resolved
     if (root) walk(root, [], className);
     else skips.add(skipForNoCss(className));
   });
+
+  for (const skip of beatenShorthands(declarations, setBy)) skips.add(skip);
 
   return { declarations, skips: skips.list };
 };

@@ -78,6 +78,11 @@ directional border — `borderTop`/`Right`/`Bottom`/`Left`,
 the longhands to write. These stay whole: `margin`, `padding`, `inset`, `flex`, `transition`,
 `font`, `gridArea`, `borderRadius`, `outline`.
 
+**A shorthand carrying a condition loses to a longhand of the same box.** StyleX gives
+longhands ID-level specificity, so `paddingTop` beats `padding` under `:hover`, the reverse of
+Tailwind. `tw2sx` catches this as `shorthand-beaten-by-longhand` rather than converting it, but
+the same trap is yours to avoid in anything you write by hand.
+
 **There is no `!important`.** `stylex.props()` argument order is the precedence rule: later wins.
 
 **`default` is required on any property carrying a condition.** Use `null` when there is no

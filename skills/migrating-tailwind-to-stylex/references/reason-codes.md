@@ -148,6 +148,38 @@ attribute than to a keyframe.
 
 ---
 
+## `shorthand-beaten-by-longhand` — check-first
+
+One class sets a shorthand under a condition (`hover:p-8`, `@media (forced-colors: active)`),
+another sets a longhand of the same box without it (`pt-2`). The two systems disagree on who
+wins, and both are silent about it:
+
+- **Tailwind** sorts by stylesheet order, so the conditional utility comes last and wins. On
+  hover, `padding-top` takes the `hover:p-8` value.
+- **StyleX** gives every longhand ID-level specificity (`.x1:not(#\#)`), so `paddingTop` wins in
+  *every* state. The conditional shorthand never reaches that side.
+
+The declaration sets match, which is why `plan` verifies everything else about these classes and
+still skips them.
+
+**Write the longhands, each carrying the condition:**
+
+```js
+// p-4 pt-2 hover:p-8
+paddingTop:    { default: 8, ':hover': 32 },
+paddingRight:  { default: 16, ':hover': 32 },
+paddingBottom: { default: 16, ':hover': 32 },
+paddingLeft:   { default: 16, ':hover': 32 },
+```
+
+If the longhand was the accident, delete that utility instead and let the shorthand convert.
+
+`outline-hidden` trips this on its own: it sets `outline-style: none` and then a visible
+`outline` under `@media (forced-colors: active)`. Converted as-is, the forced-colors fallback
+never applies, so keep that one honest — it is an accessibility affordance, not decoration.
+
+---
+
 ## `dynamic-classes` — check-first
 
 A class string built at runtime: a ternary, `&&`, a template literal with interpolation, an
