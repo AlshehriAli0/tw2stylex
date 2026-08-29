@@ -29,8 +29,8 @@ Pixels stay identical.
       They are the model this skill assumes; every rule below is a corollary. Done when you can
       say, without looking, why StyleX has no descendant selectors.
 - [ ] 2. StyleX installed and proven to render — [setup.md](references/setup.md). Once per project.
-      Then `tw2stylex init` again: with the plugin present it turns on `useCSSLayers` for
-      Tailwind 4 and checks the entry CSS order.
+      Then `tw2stylex init` again, now that it can see the plugin. Done when it reports
+      `useCSSLayers` set, or names the reason it left it off.
 - [ ] 3. Tokens and shared primitives in place before any component converts —
       [tokens.md](references/tokens.md). Every component references them, so converting first
       means converting twice.
@@ -195,8 +195,8 @@ file rather than in a pass of their own:
   eliminated, so every unused style in a shared styles module ships as CSS forever. A
   namespace per element in the file that renders it costs no CSS — [css-size.md](references/css-size.md).
 - **Reach for a token before a literal, and the codemod's literal before your own.** A repeated
-  value the project already spells `spacing.medium` should say so; `'1rem'` and `16` are two
-  atoms — "Match the literal" in [tokens.md](references/tokens.md).
+  value the project already spells `spacing.medium` should say so; a hand-written value takes
+  the form the codemod emits — "Match the literal" in [tokens.md](references/tokens.md).
 
 ## References
 

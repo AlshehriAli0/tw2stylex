@@ -53,7 +53,7 @@ by concern, and put anything with no runtime override in `defineConsts`, which e
 **Match the literal.** A StyleX atom is keyed on the value string, so `padding: 16`, `'16px'`
 and `'1rem'` are three rules. `tw2stylex` emits Tailwind's own form — `'1rem'`, `oklch(…)`,
 `calc(infinity * 1px)`; `tw2stylex explain` prints it. Hand-written values take that form, or
-a token, which covers both sides.
+a token.
 
 ## The `--` literal-key bridge
 

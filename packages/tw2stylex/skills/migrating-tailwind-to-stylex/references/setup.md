@@ -88,8 +88,7 @@ CSS. Off, StyleX is unlayered and beats everything, polyfilling its own priority
 
 - **Tailwind 4** is layered (`@layer theme, base, components, utilities`), so `true` works from
   day one when `@stylex;` follows `@import "tailwindcss";` — later-declared layers win.
-  `tw2stylex init` sets it in the plugin config it finds at the project root and reports the
-  entry order; re-run it after installing the plugin. The same holds for the base file kept
+  `tw2stylex init` sets it once the plugin is installed. The same holds for the base file kept
   after Tailwind leaves.
 - **Tailwind 3**, a reset, `@font-face`, a global stylesheet are unlayered. `false` until each
   is wrapped — `@import "./reset.css" layer(base);` — then `true`.
@@ -161,8 +160,8 @@ class this skill exists to handle.
 
 ## Production config
 
-The defaults are right. Each option here is listed because a project that changed it ships a
-bigger build with no warning:
+Each option here defaults to the production value; a project that changed it ships a bigger
+build with no warning:
 
 | option | production value | otherwise |
 |---|---|---|
