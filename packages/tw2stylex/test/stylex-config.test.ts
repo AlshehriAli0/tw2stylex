@@ -84,6 +84,27 @@ describe("turning useCSSLayers on", () => {
     expect(read("vite.config.ts")).toBe(before);
   });
 
+  test("a commented true does not hide the plugin's false option", () => {
+    tailwind4();
+    write(
+      "vite.config.ts",
+      `import stylex from '@stylexjs/unplugin/vite';\n// useCSSLayers: true\n/* useCSSLayers: false */\nexport default { plugins: [stylex({ useCSSLayers: false })] };\n`,
+    );
+    expect(enableCssLayers(project).kind).toBe("set");
+    expect(read("vite.config.ts")).toContain("stylex({ useCSSLayers: true })");
+    expect(read("vite.config.ts")).toContain("/* useCSSLayers: false */");
+  });
+
+  test("option text in a string does not hide the plugin's false option", () => {
+    tailwind4();
+    write(
+      "vite.config.ts",
+      `import stylex from '@stylexjs/unplugin/vite';\nconst note = "useCSSLayers: true";\nexport default { plugins: [stylex({ useCSSLayers: false })] };\n`,
+    );
+    expect(enableCssLayers(project).kind).toBe("set");
+    expect(read("vite.config.ts")).toContain("stylex({ useCSSLayers: true })");
+  });
+
   test("Tailwind 3 is unlayered, so the file is untouched and the outcome says why", () => {
     write("tailwind.config.js", "module.exports = {};\n");
     const before = `import stylex from '@stylexjs/unplugin/vite';\nexport default { plugins: [stylex({ useCSSLayers: false })] };\n`;

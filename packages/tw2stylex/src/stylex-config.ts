@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { parse } from "@babel/parser";
+import * as t from "@babel/types";
 import postcss from "postcss";
 
 import { findConfig, findEntryCss } from "./find-files.ts";
@@ -28,8 +30,24 @@ const PLUGIN_SOURCE =
 const PLUGIN_IMPORT =
   /import\s+(?:\*\s+as\s+)?(\w+)\s+from\s+["'](?:@stylexjs\/unplugin(?:\/\w+)?|@stylexswc\/\w+-plugin|vite-plugin-stylex)["']/;
 const POSTCSS_ENTRY = /["']@stylexjs\/postcss-plugin["']\s*:\s*\{/;
-const OFF = /useCSSLayers\s*:\s*false/;
-const ON = /useCSSLayers\s*:\s*true/;
+
+const findLayerOptions = (ast: t.File): { on?: number; off?: { start: number; end: number } } => {
+  let on: number | undefined;
+  let off: { start: number; end: number } | undefined;
+  t.traverseFast(ast, node => {
+    if (!t.isObjectProperty(node) || node.computed || !t.isBooleanLiteral(node.value)) return;
+    if (
+      !t.isIdentifier(node.key, { name: "useCSSLayers" }) &&
+      !t.isStringLiteral(node.key, { value: "useCSSLayers" })
+    )
+      return;
+    const { start, end, value } = node.value;
+    if (typeof start !== "number" || typeof end !== "number") return;
+    if (value) on = start;
+    else off = { start, end };
+  });
+  return { on, off };
+};
 
 const insideProject = (root: string, file: string | undefined): string | undefined => {
   if (file === undefined) return undefined;
@@ -66,14 +84,22 @@ export const enableCssLayers = (root: string): LayersOutcome => {
   const file = findPluginConfig(root);
   if (file === undefined) return { kind: "no-plugin" };
   const source = fs.readFileSync(file, "utf8");
-  if (ON.test(source)) return { kind: "already", file };
+  const ast = parse(source, {
+    sourceType: "unambiguous",
+    plugins: ["typescript", "jsx"],
+    errorRecovery: true,
+  });
+  const { on, off } = findLayerOptions(ast);
+  if (on !== undefined) return { kind: "already", file };
   const foundEntry = findEntryCss(root);
   const entry = insideProject(root, foundEntry);
   const config = entry === undefined ? insideProject(root, findConfig(root)) : undefined;
   if (entry === undefined)
     return { kind: config === undefined ? "unconfirmed-tailwind" : "tailwind-3", file };
 
-  const next = OFF.test(source) ? source.replace(OFF, "useCSSLayers: true") : insertOption(source);
+  const next = off
+    ? `${source.slice(0, off.start)}true${source.slice(off.end)}`
+    : insertOption(source);
   if (next === undefined) return { kind: "add-by-hand", file };
   fs.writeFileSync(file, next);
   return { kind: "set", file };
