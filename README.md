@@ -20,7 +20,7 @@ compiler, which is what `MISMATCHES: 0` means, and reports the rest as typed ski
 Use `/goal` or the equivalent command in your agent harness from the project root.
 
 ```text
-/goal Migrate this codebase from Tailwind to StyleX with tw2stylex. Install it with the project's package manager if needed, run tw2stylex init, then read and follow the installed migrating-tailwind-to-stylex skill in full. Complete its whole-project migration and verification criteria.
+/goal Migrate this codebase from Tailwind to StyleX with tw2stylex (https://github.com/AlshehriAli0/tw2stylex). Install it with the project's package manager if needed, run tw2stylex init, then read and follow the installed migrating-tailwind-to-stylex skill in full. Complete its whole-project migration and verification criteria.
 ```
 
 ## Install
