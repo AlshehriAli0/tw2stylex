@@ -1,7 +1,8 @@
 # Component API
 
 For components that accept styling from callers, and for `cva`. Reached from
-`passed-in-classes`, `variant-function`, and the overwriting rule in SKILL.md.
+`passed-in-classes`, `variant-function`, `manual-rewrite` for `cva()`, and the overwriting rule in
+SKILL.md.
 
 **Styling at a distance should fail to compile.** Tailwind made it free to reach into a
 component from outside and restyle it, so codebases grow thousands of those reaches. Convention
@@ -79,7 +80,9 @@ For **compound variants**, StyleX's docs say to pre-flatten the combination into
 style (`colorVariantsDisabled`) and select it, rather than layering a second style over
 the first. Layering is what wipes the conditions.
 
-`tw2stylex` converts cva mechanically and names styles from the axis and value.
+`plan` checks the base and variant styles and puts them in the report's `files[].source`, named
+from the axis and value. Replace the `cva()` definition and its callers together; `apply` leaves
+that definition in place.
 
 ### Branch on the variant
 

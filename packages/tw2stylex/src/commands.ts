@@ -112,6 +112,7 @@ export const initCommand = (args: Args, out: Output): CommandResult => {
   else {
     console.log(`tw2stylex ${installed.version}: skill installed`);
     for (const destination of installed.destinations) console.log(`  ${destination}`);
+    for (const backup of installed.backups) console.log(`  Previous skill saved to ${backup}`);
     console.log(`  .gitignore ignores ${dim(".tw2stylex/")}`);
     console.log(`  ${describeLayers(layers)}`);
     const order = describeEntry(entry);
@@ -249,9 +250,6 @@ export const planCommand = async (args: Args, out: Output): Promise<CommandResul
   return { exit: planExit(report) };
 };
 
-const writeWouldClobber = (args: Args, target: string, write: boolean): boolean =>
-  write && !flagWasPassed(args, "allow-dirty");
-
 const dirtyGuard = (target: string): Failure | undefined => {
   const dirty = dirtyFiles(path.resolve(containingDir(target)));
   if (!dirty || dirty.length === 0) return undefined;
@@ -308,7 +306,7 @@ export const applyCommand = async (args: Args, out: Output): Promise<CommandResu
   if (typeof target !== "string") return target;
 
   const write = flagWithoutValue(args, "write");
-  const blocked = writeWouldClobber(args, target, write) ? dirtyGuard(target) : undefined;
+  const blocked = write && !flagWithoutValue(args, "allow-dirty") ? dirtyGuard(target) : undefined;
   if (blocked) return blocked;
 
   const css = entryFor(args, containingDir(target), `tw2stylex apply ${target}`);

@@ -93,15 +93,19 @@ describe("what it writes", () => {
 
   test("one stamp, however many times it runs", () => {
     install();
-    install();
+    expect(install().backups).toEqual([]);
     expect([...entry(".claude").matchAll(/^metadata:$/gm)]).toHaveLength(1);
   });
 
-  test("nothing a previous install left behind", () => {
+  test("a changed installation is saved before replacement", () => {
     install();
     const stale = path.join(skillDir(".claude"), "references", "gone.md");
     fs.writeFileSync(stale, "old");
-    install();
+    fs.appendFileSync(path.join(skillDir(".claude"), "SKILL.md"), "\nuser note\n");
+    const backup = install().backups[0];
+    expect(backup).toBeDefined();
+    expect(fs.readFileSync(path.join(backup ?? "", "SKILL.md"), "utf8")).toContain("user note");
+    expect(fs.readFileSync(path.join(backup ?? "", "references", "gone.md"), "utf8")).toBe("old");
     expect(fs.existsSync(stale)).toBe(false);
   });
 

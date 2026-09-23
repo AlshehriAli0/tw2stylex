@@ -5,6 +5,8 @@ export type Args = {
   flags: Map<string, Flag>;
 };
 
+const BOOLEAN_FLAGS = new Set(["all", "allow-dirty", "help", "json", "stdin", "version", "write"]);
+
 export const parseArgs = (argv: string[]): Args => {
   const positional: string[] = [];
   const flags = new Map<string, Flag>();
@@ -22,7 +24,7 @@ export const parseArgs = (argv: string[]): Args => {
       continue;
     }
     const next = argv[i + 1];
-    if (next !== undefined && !next.startsWith("--")) {
+    if (!BOOLEAN_FLAGS.has(arg.slice(2)) && next !== undefined && !next.startsWith("--")) {
       flags.set(arg.slice(2), next);
       i += 1;
     } else {

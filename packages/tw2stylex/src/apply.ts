@@ -46,7 +46,9 @@ const rewritableRange = (usage: Usage): [number, number] | undefined => {
 
 const writeViaTempFile = (file: string, content: string): void => {
   const tmp = path.join(path.dirname(file), `.${path.basename(file)}.tw2stylex-${process.pid}`);
+  const mode = fs.statSync(file).mode;
   fs.writeFileSync(tmp, content);
+  fs.chmodSync(tmp, mode);
   fs.renameSync(tmp, file);
 };
 

@@ -203,7 +203,8 @@ file rather than in a pass of their own:
 - [reason-codes.md](references/reason-codes.md) — one recipe per reason code.
 - [component-api.md](references/component-api.md) — the `style` prop contract, banning owned
   properties at the type level, converting `cva`, the `className` bridge. Read it for
-  `passed-in-classes`, `variant-function`, or any component that accepts styling from callers.
+  `passed-in-classes`, `variant-function`, a `manual-rewrite` for `cva()`, or any component that
+  accepts styling from callers.
 - [tokens.md](references/tokens.md) — `@theme` → StyleX tokens, the `--` variable bridge, dark
   mode. Read it before touching tokens or theming.
 - [setup.md](references/setup.md) — installing StyleX, wiring the build, the CSS entrypoint,

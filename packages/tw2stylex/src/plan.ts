@@ -14,19 +14,28 @@ const verdictFor = (total: number, converted: number, skipped: number): FileResu
   return "partial";
 };
 
-type Scanned = { file: string; usages: ScanResult["usages"]; objectName: string };
+type Scanned = {
+  file: string;
+  usages: ScanResult["usages"];
+  objectName: string;
+  canApply: boolean;
+};
 
 const scanOne = (file: string): Scanned => {
   const code = fs.readFileSync(file, "utf8");
-  const { usages } = scanFile(code, file);
+  const { usages, hasStyleX, styleXNamespace } = scanFile(code, file);
   return {
     file,
     usages,
     objectName: usages.length > 0 ? styleObjectName(nameIsTaken(code)) : "styles",
+    canApply: !hasStyleX || styleXNamespace !== undefined,
   };
 };
 
-const resultFor = (sys: LoadedSystem, { file, usages, objectName }: Scanned): FileResult => {
+const resultFor = (
+  sys: LoadedSystem,
+  { file, usages, objectName, canApply }: Scanned,
+): FileResult => {
   const lines: FileResult["skips"] = [];
   const mismatches: FileResult["mismatches"] = [];
   const sheet = newSheet();
@@ -36,14 +45,26 @@ const resultFor = (sys: LoadedSystem, { file, usages, objectName }: Scanned): Fi
   usages.forEach((usage, i) => {
     const name = styleNameFor(usage, i, used);
     const result = convert(sys.ds, name, usage.classNames);
-    const skips = [...usage.skips, ...result.skips];
+    const manual = !canApply || usage.attributeRange === undefined;
+    const skips = [...usage.skips];
+    if (manual)
+      skips.push({
+        reason: "manual-rewrite",
+        detail: canApply
+          ? "This cva() definition needs a manual rewrite."
+          : "This file imports StyleX without a namespace import that apply can reuse.",
+        hint: canApply
+          ? "Convert the cva() variants and their call sites together by hand."
+          : "Use a namespace import from @stylexjs/stylex, then run plan again.",
+      });
+    skips.push(...result.skips);
 
     for (const skip of skips) lines.push(toSkipLine(file, usage.loc.line, usage.loc.column, skip));
     mismatches.push(...result.mismatches);
 
-    if (skips.length === 0 && result.style) {
+    if (usage.skips.length === 0 && result.skips.length === 0 && result.style) {
       sheet.add(result.style, name);
-      converted += 1;
+      if (!manual) converted += 1;
     }
   });
 
@@ -55,7 +76,8 @@ const resultFor = (sys: LoadedSystem, { file, usages, objectName }: Scanned): Fi
     usages: total,
     converted,
     skipped,
-    source: converted > 0 ? printCreate(sheet.styles, objectName) : undefined,
+    source:
+      Object.keys(sheet.styles).length > 0 ? printCreate(sheet.styles, objectName) : undefined,
     skips: lines,
     mismatches,
   };

@@ -85,6 +85,13 @@ export const Card = () => (
     expect(out).toContain("const styles = stylex.create({");
   });
 
+  test("writing keeps the source file mode", () => {
+    const file = write("mode.tsx", `export const A = () => <div className="flex" />;\n`);
+    fs.chmodSync(file, 0o750);
+    applyFile(sys, file, true);
+    expect(fs.statSync(file).mode & 0o777).toBe(0o750);
+  });
+
   test("code outside the className attributes is untouched", () => {
     const file = write("card3.tsx", source);
     applyFile(sys, file, true);
@@ -175,8 +182,11 @@ describe("repeated runs", () => {
     const code = `import { props } from '@stylexjs/stylex';\nexport const A = () => <div className="flex" />;\n`;
     const file = write("named-import.tsx", code);
     const result = applyFile(sys, file, true);
+    const planned = processFile(sys, file);
 
     expect(result.reason).toBe("already-stylex");
+    expect(planned.converted).toBe(0);
+    expect(planned.skips.map(skip => skip.reason)).toContain("manual-rewrite");
     expect(fs.readFileSync(file, "utf8")).toBe(code);
   });
 
@@ -277,7 +287,11 @@ describe("cva definitions are reported but never rewritten in place", () => {
     const code = `import { cva } from 'class-variance-authority';\nexport const v = cva("flex p-4", { variants: { size: { sm: "p-1" } } });\n`;
     const file = write("cva.tsx", code);
     const result = applyFile(sys, file, true);
+    const planned = processFile(sys, file);
     expect(result.rewritten).toBe(0);
+    expect(planned.converted).toBe(0);
+    expect(planned.skips.map(skip => skip.reason)).toContain("manual-rewrite");
+    expect(planned.source).toContain("base:");
     expect(fs.readFileSync(file, "utf8")).toBe(code);
   });
 });

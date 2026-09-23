@@ -368,6 +368,12 @@ describe("apply --write refuses to run on a dirty tree", () => {
     expect(isError(result)).toBe(false);
     expect(fs.readFileSync(target, "utf8")).toContain("stylex.props");
   });
+
+  test("--allow-dirty=false keeps the guard enabled", async () => {
+    fs.appendFileSync(target, "// edited again\n");
+    const result = await runIn(`apply ${target} --write --allow-dirty=false`);
+    expect(codeOf(result)).toBe("E_DIRTY_TREE");
+  });
 });
 
 describe("entry css discovery fails loudly rather than guessing", () => {

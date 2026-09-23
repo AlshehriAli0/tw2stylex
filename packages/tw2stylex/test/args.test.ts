@@ -30,6 +30,16 @@ describe("flags can be written either way", () => {
     expect(flagNumber(args, "limit", 20)).toBe(5);
   });
 
+  test("boolean flags before a path leave the path positional", () => {
+    const write = parse("apply --write src");
+    expect(flagWithoutValue(write, "write")).toBe(true);
+    expect(positionalAt(write, 1)).toBe("src");
+
+    const json = parse("skipped --json report.json");
+    expect(flagWithoutValue(json, "json")).toBe(true);
+    expect(positionalAt(json, 1)).toBe("report.json");
+  });
+
   test("--name= is an empty string, which is still a value", () => {
     const args = parse("plan src --json=");
     expect(flagString(args, "json")).toBe("");

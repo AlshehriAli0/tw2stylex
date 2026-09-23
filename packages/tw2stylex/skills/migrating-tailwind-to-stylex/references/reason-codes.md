@@ -8,6 +8,18 @@ Verify your fix by re-running `tw2stylex plan <path>`. The skip should disappear
 
 ---
 
+## `manual-rewrite` — check-first
+
+Follow the branch named in the skip:
+
+- **`cva()` definition:** Use the checked styles in the report's `files[].source` and follow
+  [Converting cva](./component-api.md#converting-cva). Replace the definition and its callers
+  together. Done when `plan` no longer reports this skip for the definition.
+- **StyleX import:** Change it to `import * as stylex from '@stylexjs/stylex'`, then rerun `plan`.
+  Done when the file no longer reports this skip.
+
+---
+
 ## `marker-class` — safe
 
 `group`, `peer`, `group/name`, `peer/name`. Not utilities: they mark an element so *other*
@@ -293,10 +305,9 @@ style, or restructure so the two styles do not both set that property.
 
 ## `variant-function` — safe
 
-A call to a `cva()`-produced function `tw2stylex` could not resolve to its definition, usually
-because the definition sits in another file. Run `tw2stylex plan` over the defining file too — the
-converted styles are emitted there. Conversion recipe in
-[component-api.md](./component-api.md).
+A call to a `cva()`-produced function could not resolve to its definition, usually because the
+definition sits in another file. Include that file in `plan`, then follow its `manual-rewrite`
+skip. Done when the definition and its callers use StyleX.
 
 ---
 
