@@ -1,7 +1,8 @@
-# Tokens: `@theme` → StyleX
+# Tokens and runtime themes
 
-Tokens migrate **before** components, because every component references them. Migrating a
-component before its tokens exist means rewriting it twice.
+Map token ownership **before** converting components. Give migrated components access to the
+project's existing tokens; moving token ownership into StyleX is optional and should follow the
+project's theme design.
 
 Everything below was verified against `@stylexjs/babel-plugin@0.19.0`.
 
@@ -34,7 +35,13 @@ or a runtime variable behind an `@theme inline` alias. Before removing Tailwind,
 must be defined somewhere else: keep the `:root` rule, or move it to `defineVars` with the `--`
 bridge below.
 
-## `defineVars` vs `defineConsts`
+## When StyleX should own tokens
+
+If the current CSS variables already support runtime or scoped themes, keep those definitions
+and let StyleX reference them. When deliberately moving token ownership, use the distinction
+below and trace every writer and consumer before deleting an old definition.
+
+### `defineVars` vs `defineConsts`
 
 Ask one question per token group: *does anything override this at runtime?*
 
@@ -118,17 +125,17 @@ const styles = stylex.create({ a: { padding: { default: 4, [MD]: 16 } } });
 Note the underlying constraint that motivates the shared-const advice is real: **a media query
 is a *key*, and only a const can be a key.** A `defineVars` breakpoint cannot work at all.
 
-## Dark mode
+## Dark and scoped themes
 
-Three options, in order of preference:
+Preserve the project's current toggle and scope during an incremental migration. Existing CSS
+variables can continue to drive StyleX in `.dark`, tenant, draft-preview, and nested scopes.
+Choose a new mechanism only if it reproduces all of those states:
 
-1. **`light-dark()`** — verified working as a plain value:
-   `color: 'light-dark(black, white)'`. Encode both palettes in one token and let
-   `color-scheme` decide. Simplest, no theme plumbing, works with a three-way
-   system/light/dark toggle, and one declaration where a `dark:` pair was two.
-2. **`stylex.createTheme()`** — when you need more than two palettes, or per-subtree overrides.
-   Apply the theme on the element that currently carries `.dark`. Each theme re-declares the
-   whole variable group at doubled specificity, so keep themed groups small.
-3. **`@media (prefers-color-scheme: dark)` inside `defineVars`** — only when the project has no
-   class toggle. Note `defineVars` values accept `default` plus **at-rule keys only**; a class
-   or attribute selector there does not work, which is why class-based dark mode needs (1) or (2).
+- **`light-dark()`** works as a plain value when `color-scheme` already tracks the desired
+  light/dark state. It does not by itself model tenant or nested palettes.
+- **`stylex.createTheme()`** can express explicit palettes or subtree overrides. Its themes
+  re-declare the variable group at doubled specificity, so check the interaction with existing
+  CSS-variable writers and keep groups small.
+- **`@media (prefers-color-scheme: dark)` in `defineVars`** fits a project with only a system
+  preference. `defineVars` values take `default` plus at-rule keys; a class selector there
+  does not replace a class-based toggle.

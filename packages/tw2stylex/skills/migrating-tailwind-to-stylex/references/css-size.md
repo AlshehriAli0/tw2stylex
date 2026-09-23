@@ -1,6 +1,6 @@
 # CSS size
 
-Read when a CSS bundle grew, and for the measurement step in "Finishing".
+Read when a CSS bundle grew, or for the measurement step in [finishing.md](finishing.md).
 
 ## How the size works
 
@@ -43,7 +43,7 @@ layers on for Tailwind 4; the rule for other setups is in [setup.md](setup.md).
 **Unit drift in hand-written styles.** One value in three spellings is three atoms — "Match the
 literal" in [tokens.md](tokens.md).
 
-**A theme per palette, or a `dark:` pair kept as two atoms** — "Dark mode" in
+**A theme per palette, or a `dark:` pair kept as two atoms** — "Dark and scoped themes" in
 [tokens.md](tokens.md).
 
 **`styleResolution` changed from the default** — "Production config" in [setup.md](setup.md).

@@ -1,112 +1,71 @@
-# Component API
+# Component styling API
 
-For components that accept styling from callers, and for `cva`. Reached from
-`passed-in-classes`, `variant-function`, `manual-rewrite` for `cva()`, and the overwriting rule in
-SKILL.md.
+Reach this when a component accepts caller styles, a `className` moves through a component,
+or a `cva()` definition is being replaced. Inspect the current component **and its callers**
+before choosing the StyleX API. A 1:1 peer keeps its variants, defaults, slots, refs, and
+intentional caller overrides.
 
-**Styling at a distance should fail to compile.** Tailwind made it free to reach into a
-component from outside and restyle it, so codebases grow thousands of those reaches. Convention
-will not hold them back. Every rule below moves the boundary into the type system, where the
-call site errors instead of the pixel quietly changing.
+## Preserve the override contract
 
-## Ban the properties the component owns
+`stylex.props()` merges left to right **per property**. A caller's flat `backgroundColor`
+override removes the component's hover background too. If callers may override that property,
+the caller style must carry its relevant states, or the component must expose an explicit
+variant/slot that does. Migrate a Tailwind override at the call site to a StyleX style and check
+its actual rendered states.
 
-A component's `style` prop is typed with `StyleXStylesWithout`, listing every property the
-component sets itself. Overwriting then fails to compile at the call site instead of silently
-killing a `:hover` rule at runtime.
+Use `style?: StyleXStylesWithout<{ ... }>` when the component's contract **forbids** overriding
+owned properties. The map needs concrete CSS types, and DOM props need `Omit<..., 'style'>` to
+avoid colliding with React's `CSSProperties`. When the current component intentionally accepts
+owned-property overrides, keep that ability with a typed StyleX style prop and merge it last;
+do not narrow the API silently during a 1:1 migration.
 
 ```tsx
-const styles = stylex.create({ base: { display: 'inline-flex', borderRadius: 6 } });
-const variants = stylex.create({
-  default: { backgroundColor: { default: 'blue', ':hover': 'darkblue' }, color: 'white' },
-  ghost:   { backgroundColor: { default: null,   ':hover': 'gainsboro' }, color: 'black' },
+import * as stylex from '@stylexjs/stylex';
+import type { StyleXStyles } from '@stylexjs/stylex';
+import type { ComponentProps } from 'react';
+
+const styles = stylex.create({
+  base: { display: 'inline-flex' },
+  primary: { backgroundColor: { default: 'blue', ':hover': 'darkblue' } },
 });
 
-type ButtonVariant = keyof typeof variants;          // derived; the union cannot drift
-
-type ButtonProps = Omit<React.ComponentProps<'button'>, 'style'> & {
-  variant?: ButtonVariant;
-  style?: StyleXStylesWithout<{ backgroundColor: string; color: string }>;
+type ButtonProps = Omit<ComponentProps<'button'>, 'className' | 'style'> & {
+  variant?: 'primary';
+  style?: StyleXStyles;
 };
 
-export function Button({ variant = 'default', style, ...props }: ButtonProps) {
-  return <button {...props} {...stylex.props(styles.base, variants[variant], style)} />;
-}
+const Button = ({ variant = 'primary', style, ...props }: ButtonProps) =>
+  <button {...props} {...stylex.props(styles.base, styles[variant], style)} />;
 ```
 
-Verified: `<Button style={ok.spacing} />` compiles, `<Button style={bad.background} />` and
-`variant="nope"` both error.
+The component must pass the style to its actual host element. A `stylex.props()` spread on
+`<Button>` does not reach the `<button>` it renders. Keep JSX spreads ordered so neither caller
+props nor a later `className` overwrites the merged StyleX result.
 
-Two details that fail to compile if you get them wrong:
+## Coexistence with Tailwind callers
 
-- The banned map takes **concrete CSS types** (`{ backgroundColor: string }`). `unknown` trips
-  StyleX's `NotUndefined` constraint.
-- `Omit<…, 'style'>` on the DOM props, or React's `CSSProperties` collides with the StyleX prop.
+A shared component may still receive Tailwind `className` overrides. Migrate those callers to
+StyleX styles or explicit variants as part of an in-place component conversion when possible.
+A temporary `customClassName` bridge can keep other callers working, but StyleX and Tailwind
+classes on one element still compete in the cascade. Verify precedence and state behavior in
+those callers; remove the bridge once they are migrated. If preserving them would broaden the
+selected zone too far, keep the Tailwind component until a later zone.
 
-Callers who need an owned property go through a variant.
+## Convert `cva()` with its callers
 
-## Caller styles keep their place
+Map the base string to a base style; each variant value to a style selected by a branch; defaults
+to JS defaults; compound variants to a combined style that carries all states of overlapping
+properties. Derive variant types from the StyleX style map so names cannot drift. `plan` places
+checked candidate styles in `files[].source`, but that source may omit the base and skipped
+classes. Compare it with every class in the original `cva()`; convert the missing base and resolve
+its skips before using the result. `apply` leaves `cva()` definitions for manual conversion.
+Replace each definition and its callers together.
 
-`stylex.props()` is last-wins per property, so argument order *is* the precedence rule: local
-styles first, the caller's `style` prop last.
+A static branch can compile `stylex.props()` to class strings. A runtime lookup works too when
+it reads better or the component already accepts runtime styles. Preserve existing variant
+names, sizes, and defaults; a registry component's variants are not the local API contract.
 
-## While unmigrated callers still pass className
-
-A component mid-migration still receives Tailwind strings. This bridges them so nothing breaks:
-
-```ts
-// Scaffolding. Delete once no caller passes a className string.
-export const customClassName = (c?: string) =>
-  c ? ({ [c]: c, $$css: true } as StyleXStyles) : null;
-```
-
-Pass it **before** the `style` prop so caller StyleX still wins. Each surviving bridge is what
-keeps Tailwind in the build, so treat the count of them as the migration's remaining distance.
-
-## Converting cva
-
-`cva()` maps onto StyleX's documented variants recipe — a style per variant value plus a
-lookup. There is no `stylex.variants()` API.
-
-| cva | StyleX |
-|---|---|
-| `base` string | a `base` style, first argument to `stylex.props` |
-| `variants.axis.value` | a style, picked by branching on the axis (below) |
-| `defaultVariants` | JS default parameter values |
-| `VariantProps<typeof x>` | `keyof typeof variants` |
-| `props.className` (last) | the `style` prop, last |
-
-For **compound variants**, StyleX's docs say to pre-flatten the combination into its own
-style (`colorVariantsDisabled`) and select it, rather than layering a second style over
-the first. Layering is what wipes the conditions.
-
-`plan` checks the base and variant styles and puts them in the report's `files[].source`, named
-from the axis and value. Replace the `cva()` definition and its callers together; `apply` leaves
-that definition in place.
-
-### Branch on the variant
-
-When every variant value is known and nothing else about the style is dynamic, write one
-`stylex.props` call per branch:
-
-```tsx
-const variantProps = variant === 'ghost'
-  ? stylex.props(styles.base, variants.ghost)
-  : stylex.props(styles.base, variants.default);
-
-return <button {...props} {...variantProps} />;
-```
-
-Static branches compile away to literal class strings; a lookup like `variants[variant]` gives
-the same CSS but keeps the style objects and a runtime `stylex.props` call in the bundle. Three
-or more values: a `switch` with one `stylex.props` call per case. If the component already
-takes a runtime `style` prop, the runtime path exists anyway — use whichever reads better.
-
-## Advertise only what you apply
-
-A component that accepts a `style` prop must merge it, after its own styles, onto the element a
-caller would expect to hit. Taking the prop and dropping it is worse than not taking it: the
-caller's styles vanish with no error, and the type signature said they would work.
-
-The same goes the other way. A `size` or `variant` prop the component only half-applies teaches
-callers a contract it does not keep. One styling interface per component, honoured completely.
+Search for direct calls to the exported variant function too: it may style a link, menu trigger,
+or other host outside the component. Convert those hosts with the function, or keep the legacy
+function until they are in scope. A temporary StyleX peer can serve the selected zone while the
+Tailwind component and variant function serve other routes.

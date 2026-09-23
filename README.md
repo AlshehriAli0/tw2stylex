@@ -1,7 +1,7 @@
 # tw2stylex
 
-Agent-driven Tailwind to StyleX migration. Converts what it can prove, and turns the rest into
-work an agent can pick up.
+Agent-driven, incremental Tailwind to StyleX migration. Converts what it can prove, and turns
+the rest into work an agent can pick up.
 
 <p>
   <a href="https://www.npmjs.com/package/tw2stylex"><img src="https://img.shields.io/npm/v/tw2stylex" alt="npm version" /></a>
@@ -15,6 +15,14 @@ No codemod finishes this job. tw2stylex converts only what it can verify against
 compiler, which is what `MISMATCHES: 0` means, and reports the rest as typed skips.
 `tw2stylex init` sets the repo up so your agent can work through them.
 
+## Give this to your agent
+
+Use `/goal` or the equivalent command in your agent harness from the project root.
+
+```text
+/goal Migrate this codebase from Tailwind to StyleX with tw2stylex. Install it with the project's package manager if needed, run tw2stylex init, then read and follow the installed migrating-tailwind-to-stylex skill in full. Complete its whole-project migration and verification criteria.
+```
+
 ## Install
 
 ```bash
@@ -26,12 +34,13 @@ npx tw2stylex init     # sets the repo up for your agent
 
 ```bash
 tw2stylex plan src/components           # MISMATCHES must be 0; the skips are the work
+tw2stylex apply src/components --write  # rewrites only what converts cleanly
 tw2stylex skipped .tw2stylex/plan-*.json --fix safe
                                     # ...resolve those by hand
-tw2stylex apply src/components --write  # rewrites only what converts cleanly
 ```
 
-Repeat until the skip count stops dropping. `plan` and `apply` agree on what converts, so the
+Repeat for each selected route or component. Tailwind can keep styling untouched parts of the
+app while StyleX takes over the selected zone. `plan` and `apply` agree on what converts, so the
 report never promises something `apply` will skip.
 
 | command | what it does |
@@ -60,7 +69,11 @@ and the fix for each.
 ## For agents
 
 The skill goes into `.claude/skills` or `.agents/skills`, whichever the project already has.
-The main thing it teaches is this failure, which StyleX gives you no warning about:
+It first maps the project's tokens, runtime themes, CSS, component contracts, and migration
+scope. It guides 1:1 StyleX peers for customized shadcn components, using the
+[shadcn-cssinjs registry](https://www.shadcn-cssinjs.com/docs) as a candidate rather than
+overwriting local behavior. It also teaches this failure, which StyleX gives you no warning
+about:
 
 ```js
 base:    { backgroundColor: { default: 'X', ':hover': 'Y' } }
@@ -68,8 +81,9 @@ variant: { backgroundColor: 'Z' }
 stylex.props(styles.base, styles.variant)   // -> Z. The :hover rule is GONE. No error.
 ```
 
-`StyleXStylesWithout` turns that into a compile error, by letting a component ban the properties
-it owns from its own style prop. [component-api.md] has the pattern.
+`StyleXStylesWithout` can make owned-property overrides a compile error when a component's
+contract forbids them. Existing intentional overrides need a typed StyleX path that preserves
+their states. [component-api.md] has both cases.
 
 ## Notes
 

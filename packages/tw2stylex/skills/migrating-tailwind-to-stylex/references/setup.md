@@ -1,7 +1,9 @@
 # Setup
 
-Step 2 of the loop, once per project. An unwired build renders every converted component
-unstyled, which looks exactly like a bad conversion and is not one.
+Prepare coexistence before the first conversion. An unwired build renders every converted
+component unstyled, which looks exactly like a bad conversion and is not one.
+Check the [current StyleX installation guide](https://raw.githubusercontent.com/facebook/stylex/main/packages/docs/static/llm/stylex-installation.md)
+when the project's bundler or installed StyleX version differs from these examples.
 
 ## Is it already installed?
 
@@ -22,6 +24,8 @@ npm install --save-dev @stylexjs/babel-plugin @stylexjs/postcss-plugin   # Next.
 ```
 
 Use the project's own package manager — `bun add`, `pnpm add`, `yarn add`.
+Install the target project's existing dependencies before `plan`; its Tailwind plugins must
+resolve from that project for the compiler to reproduce its design system.
 
 **Vite** — the StyleX plugin goes before the React plugin, or Fast Refresh breaks:
 
@@ -40,8 +44,8 @@ Each bundler has its own adapter — `@stylexjs/unplugin/vite`, `/webpack`, `/rs
 **Next.js 15+** — `@stylexswc/nextjs-plugin` keeps SWC. Copy its `next.config` from the
 package README rather than from memory.
 
-**Next.js 14** — `babel.config.js` plus `postcss.config.js`, copied from the installation page
-read in step 1. This switches the whole build off SWC, which costs: `next/font` fails with
+**Next.js 14** — `babel.config.js` plus `postcss.config.js`, copied from the installation guide
+linked above. This switches the whole build off SWC, which costs: `next/font` fails with
 `"next/font" requires SWC` (self-host the fonts), client JavaScript grows about 10% gzipped
 before a single style is migrated, and `@babel/runtime` must stay on v7. Say so in your summary
 before taking this path.
@@ -81,21 +85,22 @@ with two of them (or the CLI and the unplugin on the same files) every rule ship
 
 ## Two settings the migration needs
 
-**`useCSSLayers` decides who wins, and costs a third of the CSS.** Unlayered CSS beats layered
+**`useCSSLayers` decides who wins, and affects CSS size.** Unlayered CSS beats layered
 CSS. Off, StyleX is unlayered and beats everything, polyfilling its own priority order with
-`:not(#\#)` on nearly every rule — a third of the raw stylesheet. On, StyleX sits in
+`:not(#\#)` on nearly every rule. On, StyleX sits in
 `@layer priority1…N` and loses to any unlayered rule on the page.
 
-- **Tailwind 4** is layered (`@layer theme, base, components, utilities`), so `true` works from
-  day one when `@stylex;` follows `@import "tailwindcss";` — later-declared layers win.
-  `tw2stylex init` sets it once the plugin is installed. The same holds for the base file kept
-  after Tailwind leaves.
+- **Tailwind 4** is layered (`@layer theme, base, components, utilities`), so `true` can work
+  when `@stylex;` follows `@import "tailwindcss";` — later-declared layers win.
+  `tw2stylex init` sets it once the plugin is installed. Inspect the project's *other* CSS too:
+  unlayered globals and third-party rules may still win over StyleX. Keep or change the setting
+  based on the actual cascade and rendered states.
 - **Tailwind 3**, a reset, `@font-face`, a global stylesheet are unlayered. `false` until each
   is wrapped — `@import "./reset.css" layer(base);` — then `true`.
 
 Rules that set CSS custom properties are emitted outside any layer (facebook/stylex#1611), so a
 layered global cannot override a StyleX variable. `tw2stylex plan` verifies declarations, not
-cascade order; the screenshot diff in SKILL.md step 10 is what proves the choice.
+cascade order; check the affected theme and component states in the app.
 
 **`include` covering the files you are migrating**, for the Next.js/PostCSS path. A file outside
 the pattern compiles to nothing.

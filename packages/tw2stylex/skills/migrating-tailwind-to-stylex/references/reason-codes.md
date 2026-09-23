@@ -12,9 +12,11 @@ Verify your fix by re-running `tw2stylex plan <path>`. The skip should disappear
 
 Follow the branch named in the skip:
 
-- **`cva()` definition:** Use the checked styles in the report's `files[].source` and follow
-  [Converting cva](./component-api.md#converting-cva). Replace the definition and its callers
-  together. Done when `plan` no longer reports this skip for the definition.
+- **`cva()` definition:** Use the checked candidates in `files[].source`, but compare them with
+  the original definition: the source may omit the base and skipped classes. Follow
+  [Convert `cva()` with its callers](./component-api.md#convert-cva-with-its-callers) and replace
+  the definition and its callers together. Done when `plan` no longer reports this skip for the
+  definition.
 - **StyleX import:** Change it to `import * as stylex from '@stylexjs/stylex'`, then rerun `plan`.
   Done when the file no longer reports this skip.
 
@@ -78,7 +80,7 @@ named marker, or the style silently never applies. `anySibling`/`siblingAfter` c
 The element matches only under some ancestor — most often class-based dark mode, which
 compiles to `&:is(.dark *)`.
 
-**Dark mode:** pick the mechanism under "Dark mode" in [tokens.md](./tokens.md), then the component
+**Dark mode:** use the project's mechanism under "Dark and scoped themes" in [tokens.md](./tokens.md), then the component
 references one token unconditionally and the pair of classes collapses into one atom.
 
 **Any other ancestor state:** `stylex.when.ancestor()` with a marker, as in `sibling-state`.
@@ -90,6 +92,8 @@ references one token unconditionally and the pair of classes collapses into one 
 `[&_svg]:size-4`, `[&>*]:p-2`, `[&_svg:not([class*='size-'])]:size-4`. StyleX styles one element
 and hard-errors on descendant selectors. Style the child directly, or when the rule genuinely
 needs to reach across elements, move it to a CSS Module beside the component.
+`has-[...]:` alone styles the current element based on a descendant and can convert; when a
+class also contains `[&>child]`, that part still styles a different element and stays skipped.
 
 **Placeholder to find:** the child. Style it directly.
 
@@ -130,8 +134,8 @@ Its colour is Tailwind's default border colour, set in preflight rather than by 
 
 ## `dropped-shorthand` — safe
 
-Split into longhands. The skip's hint names them for the class in front of you; SKILL.md lists
-them all.
+Split into longhands. The skip's hint names them for the class in front of you; see
+[StyleX authoring limits](./stylex-limits.md) for the general rule.
 
 `animate-*` is the one that needs more than a rename — define the keyframes:
 
@@ -143,8 +147,8 @@ const styles = stylex.create({
 ```
 
 `tw-animate-css` classes (`animate-in`, `fade-in`, `data-closed:animate-out`) all land here.
-Enter/exit animations usually map better to a transition driven by the component's own state
-attribute than to a keyframe.
+Preserve the original enter/exit timing, easing, transform origin, and interruption behavior;
+use a transition driven by component state only when it reproduces those states.
 
 ---
 
@@ -211,8 +215,9 @@ need. **Interpolated values** (`` `text-[${color}]` ``) need a dynamic style fun
 A variable — almost always a `className` prop — flows into a class string. Converting the
 component changes its public API, so this is never safe to do silently.
 
-The end state is `style?: StyleXStylesWithout<{…}>`, with the `customClassName` bridge only
-while unmigrated callers still pass strings. Full pattern in
+The end state is a typed StyleX styling API that preserves the component's existing override
+contract. Use `StyleXStylesWithout` only when callers may not override owned properties;
+keep a temporary `className` bridge for unmigrated callers when its cascade checks out. See
 [component-api.md](./component-api.md).
 
 ---
@@ -223,9 +228,9 @@ A `className` is applied to a custom component rather than a host element. Sprea
 `stylex.props()` onto the component would not style the DOM it renders, so `tw2stylex` leaves the
 usage in place.
 
-Convert the component first, then replace `className` with a typed StyleX `style` prop that the
-component passes to its host element. The full contract is in
-[component-api.md](./component-api.md).
+If the component is in this migration zone, convert it and its caller override together; pass
+a typed StyleX style to the host element. If it is outside the zone, leave the Tailwind
+component working until its own migration. See [component-api.md](./component-api.md).
 
 ---
 
@@ -295,7 +300,8 @@ else to a plain CSS file.
 
 ## `lost-condition` — check-first
 
-The generated StyleX compiled, but its declarations did not match Tailwind's — typically the overwriting problem: combining styles flattened a condition away (see SKILL.md).
+The generated StyleX compiled, but its declarations did not match Tailwind's — typically a later
+style flattened a condition away. See [StyleX authoring limits](./stylex-limits.md).
 
 Read the `mismatches` array in the JSON report: it names the exact
 `(style, condition, property)` and both values. Fold the lost condition into the overriding
