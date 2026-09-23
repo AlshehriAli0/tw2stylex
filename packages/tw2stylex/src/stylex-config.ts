@@ -25,27 +25,91 @@ export type EntryOutcome = { file: string; stylex: "after" | "before" | "missing
 
 const CONFIG_FILE =
   /^(?:vite|vitest|next|postcss|webpack|rspack|rsbuild|rollup|esbuild|babel)\.config\.[cm]?[jt]sx?$|^\.babelrc(?:\.[cm]?js)?$/;
-const PLUGIN_SOURCE =
-  /["'](?:@stylexjs\/(?:unplugin(?:\/\w+)?|postcss-plugin)|@stylexswc\/\w+-plugin|vite-plugin-stylex)["']/;
+const PLUGIN_MODULE =
+  /^(?:@stylexjs\/(?:unplugin(?:\/\w+)?|postcss-plugin)|@stylexswc\/\w+-plugin|vite-plugin-stylex)$/;
 const PLUGIN_IMPORT =
   /import\s+(?:\*\s+as\s+)?(\w+)\s+from\s+["'](?:@stylexjs\/unplugin(?:\/\w+)?|@stylexswc\/\w+-plugin|vite-plugin-stylex)["']/;
 const POSTCSS_ENTRY = /["']@stylexjs\/postcss-plugin["']\s*:\s*\{/;
 
-const findLayerOptions = (ast: t.File): { on?: number; off?: { start: number; end: number } } => {
+const parseConfig = (source: string): t.File =>
+  parse(source, {
+    sourceType: "unambiguous",
+    plugins: ["typescript", "jsx"],
+    errorRecovery: true,
+  });
+
+const referencesPlugin = (node: t.Node): boolean => {
+  if (t.isImportDeclaration(node)) return PLUGIN_MODULE.test(node.source.value);
+  if (
+    t.isCallExpression(node) &&
+    t.isIdentifier(node.callee, { name: "require" }) &&
+    t.isStringLiteral(node.arguments[0])
+  )
+    return PLUGIN_MODULE.test(node.arguments[0].value);
+  return (
+    t.isObjectProperty(node) &&
+    !node.computed &&
+    t.isStringLiteral(node.key, { value: "@stylexjs/postcss-plugin" })
+  );
+};
+
+const containsPlugin = (source: string): boolean => {
+  let ast: t.File;
+  try {
+    ast = parseConfig(source);
+  } catch {
+    return false;
+  }
+  return t.traverseFast(ast, node => (referencesPlugin(node) ? t.traverseFast.stop : undefined));
+};
+
+const pluginOptionObjects = (ast: t.File, source: string): t.ObjectExpression[] => {
+  const name = PLUGIN_IMPORT.exec(source)?.[1];
+  const objects: t.ObjectExpression[] = [];
+  t.traverseFast(ast, node => {
+    if (
+      name !== undefined &&
+      t.isCallExpression(node) &&
+      t.isIdentifier(node.callee, { name }) &&
+      t.isObjectExpression(node.arguments[0])
+    )
+      objects.push(node.arguments[0]);
+    if (
+      t.isObjectProperty(node) &&
+      !node.computed &&
+      t.isStringLiteral(node.key, { value: "@stylexjs/postcss-plugin" }) &&
+      t.isObjectExpression(node.value)
+    )
+      objects.push(node.value);
+  });
+  return objects;
+};
+
+const booleanLayerOption = (node: t.Node): t.BooleanLiteral | undefined => {
+  if (!t.isObjectProperty(node) || node.computed) return undefined;
+  if (
+    !t.isIdentifier(node.key, { name: "useCSSLayers" }) &&
+    !t.isStringLiteral(node.key, { value: "useCSSLayers" })
+  )
+    return undefined;
+  return t.isBooleanLiteral(node.value) ? node.value : undefined;
+};
+
+const findLayerOptions = (
+  ast: t.File,
+  source: string,
+): { on?: number; off?: { start: number; end: number } } => {
   let on: number | undefined;
   let off: { start: number; end: number } | undefined;
-  t.traverseFast(ast, node => {
-    if (!t.isObjectProperty(node) || node.computed || !t.isBooleanLiteral(node.value)) return;
-    if (
-      !t.isIdentifier(node.key, { name: "useCSSLayers" }) &&
-      !t.isStringLiteral(node.key, { value: "useCSSLayers" })
-    )
-      return;
-    const { start, end, value } = node.value;
-    if (typeof start !== "number" || typeof end !== "number") return;
-    if (value) on = start;
-    else off = { start, end };
-  });
+  for (const object of pluginOptionObjects(ast, source))
+    for (const node of object.properties) {
+      const option = booleanLayerOption(node);
+      if (option === undefined) continue;
+      const { start, end, value } = option;
+      if (typeof start !== "number" || typeof end !== "number") continue;
+      if (value) on = start;
+      else off = { start, end };
+    }
   return { on, off };
 };
 
@@ -62,7 +126,7 @@ export const findPluginConfig = (root: string): string | undefined =>
     .readdirSync(root)
     .filter(name => CONFIG_FILE.test(name))
     .map(name => path.join(root, name))
-    .find(file => PLUGIN_SOURCE.test(fs.readFileSync(file, "utf8")));
+    .find(file => containsPlugin(fs.readFileSync(file, "utf8")));
 
 const insertOption = (source: string): string | undefined => {
   const postcssEntry = POSTCSS_ENTRY.exec(source);
@@ -84,12 +148,8 @@ export const enableCssLayers = (root: string): LayersOutcome => {
   const file = findPluginConfig(root);
   if (file === undefined) return { kind: "no-plugin" };
   const source = fs.readFileSync(file, "utf8");
-  const ast = parse(source, {
-    sourceType: "unambiguous",
-    plugins: ["typescript", "jsx"],
-    errorRecovery: true,
-  });
-  const { on, off } = findLayerOptions(ast);
+  const ast = parseConfig(source);
+  const { on, off } = findLayerOptions(ast, source);
   if (on !== undefined) return { kind: "already", file };
   const foundEntry = findEntryCss(root);
   const entry = insideProject(root, foundEntry);

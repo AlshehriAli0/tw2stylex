@@ -76,6 +76,18 @@ describe("turning useCSSLayers on", () => {
     );
   });
 
+  test("the PostCSS plugin's false option becomes true", () => {
+    tailwind4();
+    write(
+      "postcss.config.js",
+      `module.exports = { plugins: { '@stylexjs/postcss-plugin': { useCSSLayers: false } } };\n`,
+    );
+    expect(enableCssLayers(project).kind).toBe("set");
+    expect(read("postcss.config.js")).toContain(
+      "'@stylexjs/postcss-plugin': { useCSSLayers: true }",
+    );
+  });
+
   test("already true is left alone", () => {
     tailwind4();
     const before = `import stylex from '@stylexjs/unplugin/vite';\nexport default { plugins: [stylex({ useCSSLayers: true })] };\n`;
@@ -102,6 +114,28 @@ describe("turning useCSSLayers on", () => {
       `import stylex from '@stylexjs/unplugin/vite';\nconst note = "useCSSLayers: true";\nexport default { plugins: [stylex({ useCSSLayers: false })] };\n`,
     );
     expect(enableCssLayers(project).kind).toBe("set");
+    expect(read("vite.config.ts")).toContain("stylex({ useCSSLayers: true })");
+  });
+
+  test("another plugin's true option does not hide StyleX's false option", () => {
+    tailwind4();
+    write(
+      "vite.config.ts",
+      `import stylex from '@stylexjs/unplugin/vite';\nexport default { plugins: [other({ useCSSLayers: true }), stylex({ useCSSLayers: false })] };\n`,
+    );
+    expect(enableCssLayers(project).kind).toBe("set");
+    expect(read("vite.config.ts")).toContain("other({ useCSSLayers: true })");
+    expect(read("vite.config.ts")).toContain("stylex({ useCSSLayers: true })");
+  });
+
+  test("another plugin's false option is not edited when StyleX has no option", () => {
+    tailwind4();
+    write(
+      "vite.config.ts",
+      `import stylex from '@stylexjs/unplugin/vite';\nexport default { plugins: [other({ useCSSLayers: false }), stylex()] };\n`,
+    );
+    expect(enableCssLayers(project).kind).toBe("set");
+    expect(read("vite.config.ts")).toContain("other({ useCSSLayers: false })");
     expect(read("vite.config.ts")).toContain("stylex({ useCSSLayers: true })");
   });
 
@@ -143,6 +177,28 @@ describe("turning useCSSLayers on", () => {
     tailwind4();
     write("vite.config.ts", `export default { plugins: [react()] };\n`);
     expect(enableCssLayers(project).kind).toBe("no-plugin");
+  });
+
+  test("a commented package name cannot hide the real plugin config", () => {
+    tailwind4();
+    write("next.config.js", `// '@stylexjs/unplugin/vite'\nmodule.exports = {};\n`);
+    write(
+      "vite.config.ts",
+      `import stylex from '@stylexjs/unplugin/vite';\nexport default { plugins: [stylex({ useCSSLayers: false })] };\n`,
+    );
+    expect(enableCssLayers(project).kind).toBe("set");
+    expect(read("vite.config.ts")).toContain("stylex({ useCSSLayers: true })");
+  });
+
+  test("a quoted package name cannot hide the real plugin config", () => {
+    tailwind4();
+    write("next.config.js", `const note = '@stylexjs/unplugin/vite';\nmodule.exports = {};\n`);
+    write(
+      "vite.config.ts",
+      `import stylex from '@stylexjs/unplugin/vite';\nexport default { plugins: [stylex({ useCSSLayers: false })] };\n`,
+    );
+    expect(enableCssLayers(project).kind).toBe("set");
+    expect(read("vite.config.ts")).toContain("stylex({ useCSSLayers: true })");
   });
 });
 
