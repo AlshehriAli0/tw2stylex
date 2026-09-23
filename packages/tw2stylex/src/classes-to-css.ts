@@ -62,6 +62,7 @@ const COMPOSES_A_LIST = /shadow|filter|transition|transform/;
 const MARKER_CLASS = /^(group|peer)(\/[\w-]+)?$/;
 const OPENERS = "([";
 const CLOSERS = ")]";
+const CONDITIONS_ON_AN_ANCESTOR = /^&?:(is|where)\(/;
 
 const splitOnTopLevelCommas = (input: string): string[] => {
   const parts: string[] = [];
@@ -92,8 +93,18 @@ const splitOnTopLevelCommas = (input: string): string[] => {
 const withoutAttributeValues = (selector: string): string =>
   selector.replace(/"[^"]*"|'[^']*'/g, '""');
 
-const reachesAnotherElement = (suffix: string): boolean =>
-  /[\s>+~]/.test(withoutAttributeValues(suffix));
+const reachesAnotherElement = (suffix: string): boolean => {
+  const readable = withoutAttributeValues(suffix);
+  // Keep ancestor theme conditions on the existing manual path; :has() reads a child on this host.
+  if (CONDITIONS_ON_AN_ANCESTOR.test(readable) && /[\s>+~]/.test(readable)) return true;
+  let depth = 0;
+  for (const char of readable) {
+    if (OPENERS.includes(char)) depth += 1;
+    else if (CLOSERS.includes(char)) depth -= 1;
+    else if (depth === 0 && /[\s>+~]/.test(char)) return true;
+  }
+  return false;
+};
 
 const CONTINUES_A_CLASS_NAME = /^[\w-]/;
 
@@ -250,8 +261,6 @@ const slotsFromClasses = (roots: Roots): Map<string, string> => {
 
 const twSlots = (ds: DesignSystem, roots: Roots): Map<string, string> =>
   new Map([...ds.slotDefaults, ...slotDefaults(roots), ...slotsFromClasses(roots)]);
-
-const CONDITIONS_ON_AN_ANCESTOR = /^&?:(is|where)\(/;
 
 const afterOwnClass = (selector: string, className: string): string => {
   const own = `.${className}`;

@@ -86,6 +86,22 @@ describe("what Tailwind emits that StyleX has no home for", () => {
   });
 });
 
+describe("selectors that inspect a child without styling it", () => {
+  test("has-[...] styles the host and converts through StyleX", () => {
+    const out = run("has-[>[data-slot=button-group]]:gap-2");
+    expect(out.skips).toEqual([]);
+    expect(out.mismatches).toEqual([]);
+    expect(out.style?.gap).toEqual({
+      default: null,
+      ":has( > [data-slot=button-group])": "0.5rem",
+    });
+  });
+
+  test("a rule that styles the child still needs a rewrite", () => {
+    expect(reasonsOf("[&>span]:gap-2")).toContain("descendant-selector");
+  });
+});
+
 describe("a composition class with nothing to compose contributes nothing", () => {
   // v4's bare `transform` is `transform: var(--tw-rotate-x,) var(--tw-skew-y,) …`. With no
   // rotate or skew utility on the element every slot is empty, the browser drops the
