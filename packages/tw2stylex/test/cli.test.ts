@@ -93,6 +93,21 @@ describe("exit codes are what a script should branch on", () => {
     expect(r.err).toContain("hint: Run tw2stylex plan");
     expect(r.err).toContain("code: E_NO_REPORT");
   });
+
+  test("a missing project plugin is a setup error, not a codemod bug", () => {
+    const dir = fs.mkdtempSync(path.join(repo, "test/missing-plugin-"));
+    try {
+      const entry = path.join(dir, "entry.css");
+      fs.writeFileSync(entry, '@import "tailwindcss";\n@plugin "tw2stylex-test-missing-plugin";\n');
+      const r = run("explain", "p-4", "--css", entry);
+      expect(r.code).toBe(EXIT.NOT_READY);
+      expect(r.err).toContain("E_PROJECT_DEPENDENCY");
+      expect(r.err).toContain("tw2stylex-test-missing-plugin");
+      expect(r.err).toContain("Install the target project's dependencies");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // The agent reads stdout every run, so stdout is where the pointer to the skill has to live.

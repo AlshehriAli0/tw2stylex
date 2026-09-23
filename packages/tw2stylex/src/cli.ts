@@ -16,6 +16,7 @@ import {
 import { EXIT, fail } from "./fail.ts";
 import { version } from "./init.ts";
 import { FIX_MEANING, FIXES, REASONS } from "./skip.ts";
+import { MissingProjectDependencyError } from "./tailwind.ts";
 
 if (typeof enableCompileCache === "function") enableCompileCache();
 
@@ -33,6 +34,7 @@ COMMANDS  (nothing writes unless you say --write)
 
 A TYPICAL RUN
   tw2stylex plan src/components        # MISMATCHES must be 0; the skips are the work
+  tw2stylex apply src/components --write
   tw2stylex skipped .tw2stylex/plan-*.json --fix safe
   ...fix those, re-run plan, repeat until the skip count stops dropping
 
@@ -110,17 +112,20 @@ try {
   process.exit(await main());
 } catch (e: unknown) {
   const message = e instanceof Error ? e.message : String(e);
+  const missingDependency = e instanceof MissingProjectDependencyError;
   console.error(
     JSON.stringify(
       fail(
-        "E_INTERNAL",
-        EXIT.OUR_BUG,
+        missingDependency ? "E_PROJECT_DEPENDENCY" : "E_INTERNAL",
+        missingDependency ? EXIT.NOT_READY : EXIT.OUR_BUG,
         message,
-        "This is a tw2stylex bug. Re-run with --json and file the output.",
+        missingDependency
+          ? "Install the target project's dependencies, then retry."
+          : "This is a tw2stylex bug. Re-run with --json and file the output.",
       ),
       null,
       2,
     ),
   );
-  process.exit(EXIT.OUR_BUG);
+  process.exit(missingDependency ? EXIT.NOT_READY : EXIT.OUR_BUG);
 }

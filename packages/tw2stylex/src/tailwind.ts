@@ -32,6 +32,12 @@ const themeDefaultIn =
 
 export type LoadedSystem = { ds: DesignSystem; entry: string; base: string; version: string };
 
+export class MissingProjectDependencyError extends Error {
+  constructor(id: string, from: string) {
+    super(`Cannot resolve project dependency "${id}" from ${from}.`);
+  }
+}
+
 type PackageMeta = {
   exports?: unknown;
   style?: unknown;
@@ -225,8 +231,14 @@ const loadV4 = async (
     id: string,
     from: string,
   ): Promise<{ path: string; base: string; module: unknown }> => {
-    const file =
-      id.startsWith(".") || path.isAbsolute(id) ? path.resolve(from, id) : req.resolve(id);
+    let file: string;
+    try {
+      file = id.startsWith(".") || path.isAbsolute(id) ? path.resolve(from, id) : req.resolve(id);
+    } catch (error: unknown) {
+      if (error instanceof Error && "code" in error && error.code === "MODULE_NOT_FOUND")
+        throw new MissingProjectDependencyError(id, from);
+      throw error;
+    }
     const mod: unknown = await import(file);
     return { path: file, base: path.dirname(file), module: cjsDefault(mod) };
   };
