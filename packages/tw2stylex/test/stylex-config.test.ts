@@ -92,6 +92,32 @@ describe("turning useCSSLayers on", () => {
     expect(read("vite.config.ts")).toBe(before);
   });
 
+  test("a configless Tailwind 3 setup keeps CSS layers off", () => {
+    const before = `import stylex from '@stylexjs/unplugin/vite';\nexport default { plugins: [stylex({ useCSSLayers: false })] };\n`;
+    write("vite.config.ts", before);
+    write("src/index.css", "@tailwind base;\n@tailwind utilities;\n");
+    expect(enableCssLayers(project).kind).toBe("unconfirmed-tailwind");
+    expect(read("vite.config.ts")).toBe(before);
+  });
+
+  test("a nested project does not use its parent's Tailwind 4 entry", () => {
+    tailwind4();
+    const nested = path.join(project, "packages", "legacy");
+    const before = `import stylex from '@stylexjs/unplugin/vite';\nexport default { plugins: [stylex({ useCSSLayers: false })] };\n`;
+    write("packages/legacy/vite.config.ts", before);
+    write("packages/legacy/src/index.css", "@tailwind base;\n@tailwind utilities;\n");
+    expect(enableCssLayers(nested).kind).toBe("unconfirmed-tailwind");
+    expect(read("packages/legacy/vite.config.ts")).toBe(before);
+  });
+
+  test("a commented Tailwind import does not enable CSS layers", () => {
+    const before = `import stylex from '@stylexjs/unplugin/vite';\nexport default { plugins: [stylex({ useCSSLayers: false })] };\n`;
+    write("vite.config.ts", before);
+    write("src/index.css", '/* @import "tailwindcss"; */\n@tailwind utilities;\n');
+    expect(enableCssLayers(project).kind).toBe("unconfirmed-tailwind");
+    expect(read("vite.config.ts")).toBe(before);
+  });
+
   test("no plugin config means nothing to edit", () => {
     tailwind4();
     write("vite.config.ts", `export default { plugins: [react()] };\n`);
@@ -113,5 +139,17 @@ describe("the CSS entrypoint order", () => {
   test("no @stylex at all is reported", () => {
     write("src/index.css", '@import "tailwindcss";\n');
     expect(checkEntryOrder(project)?.stylex).toBe("missing");
+  });
+
+  test("a commented @stylex directive is still missing", () => {
+    write("src/index.css", '@import "tailwindcss";\n/* @stylex; */\n');
+    expect(checkEntryOrder(project)?.stylex).toBe("missing");
+  });
+
+  test("a nested project does not report its parent's CSS entry", () => {
+    tailwind4();
+    const nested = path.join(project, "packages", "legacy");
+    fs.mkdirSync(nested, { recursive: true });
+    expect(checkEntryOrder(nested)).toBeUndefined();
   });
 });

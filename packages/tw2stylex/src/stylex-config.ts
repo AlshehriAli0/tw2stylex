@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import postcss from "postcss";
+
 import { findConfig, findEntryCss } from "./find-files.ts";
 
 /**
@@ -14,6 +16,7 @@ export type LayersOutcome =
   | { kind: "already"; file: string }
   | { kind: "add-by-hand"; file: string }
   | { kind: "tailwind-3"; file: string }
+  | { kind: "unconfirmed-tailwind"; file: string }
   | { kind: "no-plugin" };
 
 export type EntryOutcome = { file: string; stylex: "after" | "before" | "missing" } | undefined;
@@ -28,6 +31,14 @@ const POSTCSS_ENTRY = /["']@stylexjs\/postcss-plugin["']\s*:\s*\{/;
 const OFF = /useCSSLayers\s*:\s*false/;
 const ON = /useCSSLayers\s*:\s*true/;
 
+const insideProject = (root: string, file: string | undefined): string | undefined => {
+  if (file === undefined) return undefined;
+  const relative = path.relative(root, file);
+  return relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)
+    ? undefined
+    : file;
+};
+
 export const findPluginConfig = (root: string): string | undefined =>
   fs
     .readdirSync(root)
@@ -36,9 +47,9 @@ export const findPluginConfig = (root: string): string | undefined =>
     .find(file => PLUGIN_SOURCE.test(fs.readFileSync(file, "utf8")));
 
 const insertOption = (source: string): string | undefined => {
-  const postcss = POSTCSS_ENTRY.exec(source);
-  if (postcss) {
-    const at = postcss.index + postcss[0].length;
+  const postcssEntry = POSTCSS_ENTRY.exec(source);
+  if (postcssEntry) {
+    const at = postcssEntry.index + postcssEntry[0].length;
     return `${source.slice(0, at)} useCSSLayers: true,${source.slice(at)}`;
   }
   const name = PLUGIN_IMPORT.exec(source)?.[1];
@@ -51,15 +62,16 @@ const insertOption = (source: string): string | undefined => {
     : `${source.slice(0, at - 1)}{ useCSSLayers: true })${source.slice(at)}`;
 };
 
-const isTailwind4 = (root: string): boolean =>
-  findEntryCss(root) !== undefined || findConfig(root) === undefined;
-
 export const enableCssLayers = (root: string): LayersOutcome => {
   const file = findPluginConfig(root);
   if (file === undefined) return { kind: "no-plugin" };
   const source = fs.readFileSync(file, "utf8");
   if (ON.test(source)) return { kind: "already", file };
-  if (!isTailwind4(root)) return { kind: "tailwind-3", file };
+  const foundEntry = findEntryCss(root);
+  const entry = insideProject(root, foundEntry);
+  const config = entry === undefined ? insideProject(root, findConfig(root)) : undefined;
+  if (entry === undefined)
+    return { kind: config === undefined ? "unconfirmed-tailwind" : "tailwind-3", file };
 
   const next = OFF.test(source) ? source.replace(OFF, "useCSSLayers: true") : insertOption(source);
   if (next === undefined) return { kind: "add-by-hand", file };
@@ -68,11 +80,17 @@ export const enableCssLayers = (root: string): LayersOutcome => {
 };
 
 export const checkEntryOrder = (root: string): EntryOutcome => {
-  const file = findEntryCss(root);
+  const found = findEntryCss(root);
+  const file = insideProject(root, found);
   if (file === undefined) return undefined;
-  const css = fs.readFileSync(file, "utf8");
-  const directive = css.search(/@stylex\b/);
-  const tailwind = css.search(/@import\s+["']tailwindcss/);
+  const nodes = postcss.parse(fs.readFileSync(file, "utf8"), { from: file }).nodes;
+  const directive = nodes.findIndex(node => node.type === "atrule" && node.name === "stylex");
+  const tailwind = nodes.findIndex(
+    node =>
+      node.type === "atrule" &&
+      node.name === "import" &&
+      /^["']tailwindcss(?:["'/])/.test(node.params),
+  );
   if (directive === -1) return { file, stylex: "missing" };
   return { file, stylex: directive > tailwind ? "after" : "before" };
 };
@@ -83,6 +101,8 @@ const LAYERS_MESSAGE: Record<LayersOutcome["kind"], string> = {
   "add-by-hand": 'add useCSSLayers: true to the StyleX plugin options (setup.md, "Two settings").',
   "tailwind-3":
     'useCSSLayers left off — Tailwind 3 is unlayered and would beat layered StyleX (setup.md, "Two settings").',
+  "unconfirmed-tailwind":
+    "useCSSLayers left off — no Tailwind 4 CSS entry found; confirm the setup before enabling layers.",
   "no-plugin": "No StyleX plugin config found at the project root; install one first (setup.md).",
 };
 

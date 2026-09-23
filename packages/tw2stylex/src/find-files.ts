@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import postcss from "postcss";
+
 const ENTRY_CSS_LOCATIONS = [
   "src/index.css",
   "src/app.css",
@@ -12,10 +14,23 @@ const ENTRY_CSS_LOCATIONS = [
 
 const PULLS_IN_TAILWIND = /@import\s+["']tailwindcss/;
 
-export const findEntryCss = (from: string): string | undefined =>
-  searchUp(from, ENTRY_CSS_LOCATIONS).find(
-    file => fs.existsSync(file) && PULLS_IN_TAILWIND.test(fs.readFileSync(file, "utf8")),
+const importsTailwind = (file: string): boolean => {
+  const css = fs.readFileSync(file, "utf8");
+  return (
+    PULLS_IN_TAILWIND.test(css) &&
+    postcss
+      .parse(css, { from: file })
+      .nodes.some(
+        node =>
+          node.type === "atrule" &&
+          node.name === "import" &&
+          /^["']tailwindcss(?:["'/])/.test(node.params),
+      )
   );
+};
+
+export const findEntryCss = (from: string): string | undefined =>
+  searchUp(from, ENTRY_CSS_LOCATIONS).find(file => fs.existsSync(file) && importsTailwind(file));
 
 const CONFIG_LOCATIONS = [
   "tailwind.config.js",
