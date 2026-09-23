@@ -205,7 +205,13 @@ const dropZeroUnits = (v: string): string =>
 const tightenSlashes = (v: string): string => v.replace(/\s*\/\s*/g, "/").replace(/;$/, "");
 
 const unminified = (v: string): string =>
-  tightenSlashes(dropZeroUnits(millisecondsToSeconds(restoreLeadingZero(collapseWhitespace(v)))));
+  tightenSlashes(
+    dropZeroUnits(
+      millisecondsToSeconds(
+        restoreLeadingZero(collapseWhitespace(v).replace(/drop-shadow\(\s+/g, "drop-shadow(")),
+      ),
+    ),
+  );
 
 const toKebabCase = (prop: string): string =>
   prop.startsWith("--") ? prop : prop.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);

@@ -50,6 +50,13 @@ describe("convert decides once what counts as converted", () => {
     expect(out.skips).toEqual([]);
     expect(out.style).toBeUndefined();
   });
+
+  test("Tailwind's spacing inside drop-shadow() does not create a false mismatch", () => {
+    const out = run("drop-shadow");
+    expect(out.skips).toEqual([]);
+    expect(out.mismatches).toEqual([]);
+    expect(out.style?.filter).toContain("drop-shadow(");
+  });
 });
 
 /**
