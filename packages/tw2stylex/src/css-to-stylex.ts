@@ -71,17 +71,25 @@ export const toStyle = (resolved: ResolvedClasses): Style => {
 
 const key = (k: string): string => (IDENT.test(k) ? k : JSON.stringify(k));
 
-const printValue = (value: StyleValue, indent: number): string => {
+const printValue = (
+  value: StyleValue,
+  indent: number,
+  replacements?: Map<string, string>,
+): string => {
   if (value === null) return "null";
   if (typeof value === "number") return String(value);
-  if (typeof value === "string") return JSON.stringify(value);
-  return printObject(value, indent);
+  if (typeof value === "string") return replacements?.get(value) ?? JSON.stringify(value);
+  return printObject(value, indent, replacements);
 };
 
-const printObject = (obj: ConditionTree | Style, indent: number): string => {
+const printObject = (
+  obj: ConditionTree | Style,
+  indent: number,
+  replacements?: Map<string, string>,
+): string => {
   const pad = " ".repeat(indent + 2);
   const lines = Object.entries(obj).map(
-    entry => `${pad}${key(entry[0])}: ${printValue(entry[1], indent + 2)},`,
+    entry => `${pad}${key(entry[0])}: ${printValue(entry[1], indent + 2, replacements)},`,
   );
   return `{\n${lines.join("\n")}\n${" ".repeat(indent)}}`;
 };
@@ -90,9 +98,10 @@ export const printCreate = (
   styleMap: Record<string, Style>,
   varName = "styles",
   stylex = "stylex",
+  replacements?: Map<string, string>,
 ): string => {
   const body = Object.entries(styleMap)
-    .map(([name, style]) => `  ${key(name)}: ${printObject(style, 2)},`)
+    .map(([name, style]) => `  ${key(name)}: ${printObject(style, 2, replacements)},`)
     .join("\n");
   return `const ${varName} = ${stylex}.create({\n${body}\n});`;
 };

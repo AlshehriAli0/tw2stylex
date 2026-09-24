@@ -6,10 +6,10 @@ import path from "node:path";
 import MagicString from "magic-string";
 
 import { convert } from "./convert.ts";
-import { printCreate } from "./css-to-stylex.ts";
 import { scanFile, type ScanResult, type Usage } from "./scan-file.ts";
 import { nameIsTaken, newSheet, styleNameFor, styleObjectName } from "./style-name.ts";
 import type { LoadedSystem } from "./tailwind.ts";
+import { mappedSource, tokenSkips } from "./tokens.ts";
 
 export type ApplyFileResult = {
   file: string;
@@ -83,7 +83,7 @@ export const applyScanned = (
     const range = rewritableRange(usage);
     const result = range ? convert(sys.ds, name, usage.classNames) : undefined;
 
-    if (!range || !result?.style) {
+    if (!range || !result?.style || tokenSkips(result.style, sys.tokens).length > 0) {
       skipped += 1;
       return;
     }
@@ -95,8 +95,17 @@ export const applyScanned = (
   if (!rewritten)
     return { file, written: false, rewritten: 0, skipped, reason: "nothing-convertible" };
 
-  if (!hasStyleX) edits.appendLeft(importInsertAt, `import * as stylex from '@stylexjs/stylex';\n`);
-  edits.append(`\n\n${printCreate(sheet.styles, objectName, stylex)}\n`);
+  const mapped = mappedSource({
+    styles: sheet.styles,
+    tokens: sys.tokens,
+    file,
+    code,
+    objectName,
+    stylex,
+  });
+  if (!hasStyleX) mapped.imports.unshift("import * as stylex from '@stylexjs/stylex';");
+  if (mapped.imports.length) edits.appendLeft(importInsertAt, `${mapped.imports.join("\n")}\n`);
+  edits.append(`\n\n${mapped.source}\n`);
   const next = edits.toString();
 
   if (write) writeViaTempFile(file, next);

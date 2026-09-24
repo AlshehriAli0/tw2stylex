@@ -107,6 +107,23 @@ describe("the first line survives truncation", () => {
   });
 });
 
+test("candidate fragments and generated names are visible before copying source", () => {
+  const out = renderReport(
+    report([
+      file({
+        source: "const styles = stylex.create({});",
+        sourceStatus: "fragment",
+        unresolvedClasses: ["dark:text-white"],
+        reviewNames: ["div2 (src/a.tsx:3)"],
+      }),
+    ]),
+    20,
+  );
+  expect(out).toContain("Fragment only: src/a.tsx");
+  expect(out).toContain("dark:text-white");
+  expect(out).toContain("Review generated names in src/a.tsx: div2");
+});
+
 describe("mismatches are a hard stop and print first", () => {
   test("zero mismatches say so plainly with no alarm", () => {
     const out = renderReport(report([file()]), 20);

@@ -34,6 +34,10 @@ export const styleNameFor = (usage: Usage, index: number, used: Set<string>): st
   return name;
 };
 
+export const needsNameReview = (usage: Usage, name: string): boolean =>
+  /^(?:div|span|section|article|main|header|footer|nav|button|p|a|ul|li|el)\d*$/.test(name) &&
+  (usage.elementName === undefined || /^[a-z]+$/.test(usage.elementName));
+
 export type Sheet = { styles: Record<string, Style>; add: (style: Style, name: string) => string };
 
 export const newSheet = (): Sheet => {

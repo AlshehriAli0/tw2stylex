@@ -12,6 +12,7 @@ export type Usage = {
   loc: Loc;
   attributeRange?: [number, number];
   elementName?: string;
+  componentName?: string;
   kind: UsageKind;
   variantAxis?: string;
   variantValue?: string;
@@ -20,6 +21,7 @@ export type Usage = {
 
 export type ScanResult = {
   usages: Usage[];
+  imports?: Record<string, string>;
   hasStyleX: boolean;
   styleXNamespace?: string;
   importInsertAt: number;
@@ -253,6 +255,7 @@ const jsxUsage = (
     loc: locOf(attr),
     attributeRange: rangeOf(attr),
     elementName: elementName(element),
+    componentName: onComponent ? tagOf(element) : undefined,
     kind: t.isCallExpression(expr) ? "cn-call" : "literal",
     skips,
   };
@@ -319,6 +322,7 @@ export const scanFile = (code: string, filename: string): ScanResult => {
   });
 
   const usages: Usage[] = [];
+  const imports: Record<string, string> = {};
   let hasStyleX = false;
   let styleXNamespace: string | undefined;
   const elementOf = new Map<t.JSXAttribute, t.JSXOpeningElement>();
@@ -338,6 +342,7 @@ export const scanFile = (code: string, filename: string): ScanResult => {
 
   const readImport = (declaration: t.ImportDeclaration): void => {
     const from = declaration.source.value;
+    for (const specifier of declaration.specifiers) imports[specifier.local.name] = from;
     if (!from.startsWith("@stylexjs/")) return;
     hasStyleX = true;
     const namespace = declaration.specifiers.find(t.isImportNamespaceSpecifier);
@@ -352,5 +357,11 @@ export const scanFile = (code: string, filename: string): ScanResult => {
     else if (t.isImportDeclaration(node)) readImport(node);
   });
 
-  return { usages, hasStyleX, styleXNamespace, importInsertAt: lineAfterDirectives(ast, code) };
+  return {
+    usages,
+    imports,
+    hasStyleX,
+    styleXNamespace,
+    importInsertAt: lineAfterDirectives(ast, code),
+  };
 };

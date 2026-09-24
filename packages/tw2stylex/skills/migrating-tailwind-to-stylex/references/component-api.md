@@ -57,8 +57,9 @@ Map the base string to a base style; each variant value to a style selected by a
 to JS defaults; compound variants to a combined style that carries all states of overlapping
 properties. Derive variant types from the StyleX style map so names cannot drift. `plan` places
 checked candidate styles in `files[].source`, but that source may omit the base and skipped
-classes. Compare it with every class in the original `cva()`; convert the missing base and resolve
-its skips before using the result. `apply` leaves `cva()` definitions for manual conversion.
+classes. `files[].sourceStatus: "fragment"` and `files[].unresolvedClasses` show what remains;
+review `files[].reviewNames` before copying generic keys. Compare every class in the original
+`cva()` and resolve its skips. `apply` leaves `cva()` definitions for manual conversion.
 Replace each definition and its callers together.
 
 A static branch can compile `stylex.props()` to class strings. A runtime lookup works too when

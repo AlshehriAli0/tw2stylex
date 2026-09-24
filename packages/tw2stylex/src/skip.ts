@@ -18,6 +18,7 @@ export const REASONS = [
   "two-style-sources",
   "important-modifier",
   "stylex-compile-error",
+  "token-needs-verification",
 ] as const;
 
 export type Reason = (typeof REASONS)[number];
@@ -53,6 +54,7 @@ export const DEFAULT_FIX: Record<Reason, Fix> = {
   "two-style-sources": "check-first",
   "important-modifier": "needs-lookup",
   "stylex-compile-error": "unknown",
+  "token-needs-verification": "check-first",
 };
 
 export type Skip = {

@@ -25,16 +25,20 @@ does not prove cascade, component behavior, or visual parity; resolve and check 
    Use [tokens.md](references/tokens.md) to decide how StyleX reads the *existing* design tokens;
    moving token ownership is a separate choice. Capture the zone's current appearance and
    interaction states before editing.
-3. **Plan, then apply.** Run `tw2stylex plan <path>` on the zone and inspect its report. If
-   `MISMATCHES` exceeds 0, keep that output unapplied. Reproduce the class with `explain`, check
-   the project's Tailwind entry and plugins, and report a tool bug if it still differs. Otherwise run
-   `tw2stylex apply <path> --write` for verified usages. `apply` can leave other usages in the
-   same file; review the diff before resolving them. Use `--allow-dirty` only when you have
-   inspected the existing edits under that path.
-4. **Finish the skips.** Re-run `plan`, then work each skip through
+3. **Plan, then apply.** Run `tw2stylex plan <path>` on the zone. Use its grouped component
+   callers and import paths to choose what to inspect. If `MISMATCHES` exceeds 0, keep that
+   output unapplied. Reproduce the class with `explain`, check the project's Tailwind entry and
+   plugins, and report a tool bug if it still differs. Otherwise review
+   `tw2stylex apply <path> --diff`, then run `tw2stylex apply <path> --write`. `apply` may leave
+   other usages in the file. Use `--allow-dirty` only after inspecting existing edits.
+4. **Finish the skips.** Re-run `plan`; `skipped <report>` warns if its inputs or tool version
+   changed. Work each skip through
    [reason-codes.md](references/reason-codes.md). Read [component-api.md](references/component-api.md)
    for components that accept caller styles or use `cva`; read
    [shadcn.md](references/shadcn.md) when the zone uses local shadcn components. Use
+   [tokens.md](references/tokens.md) for optional exact `defineConsts` mappings. A
+   `files[].sourceStatus` of `fragment` means the candidate source is incomplete; read
+   `unresolvedClasses` and review `reviewNames` before using generated keys. Use
    [stylex-limits.md](references/stylex-limits.md) when writing StyleX by hand. Preserve the
    behavior of CSS-only rules in a scoped CSS file when StyleX cannot express them. Re-run
    `plan` after each batch; account for every remaining skip in the selected zone.

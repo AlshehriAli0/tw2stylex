@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { parseArgs } from "../src/args.ts";
+import { initCommand, readOutput } from "../src/commands.ts";
 import {
   AGENT_HOMES,
   homesPresent,
@@ -53,6 +55,28 @@ describe("which agent homes it writes to", () => {
   test("Codex reads .agents, so .agents is one of the homes", () => {
     expect(AGENT_HOMES.map(h => h.home)).toContain(".agents");
   });
+});
+
+test("init names installed agents and gives the exact command for omitted homes", () => {
+  fs.mkdirSync(path.join(project, ".claude"));
+  const previous = process.cwd();
+  const lines: string[] = [];
+  const log = console.log;
+  try {
+    process.chdir(project);
+    console.log = (...parts: unknown[]): void => {
+      lines.push(parts.map(String).join(" "));
+    };
+    const args = parseArgs(["init"]);
+    initCommand(args, readOutput(args));
+  } finally {
+    process.chdir(previous);
+    console.log = log;
+  }
+  const output = lines.join("\n");
+  expect(output).toContain("Claude Code:");
+  expect(output).toContain("Codex, Gemini CLI (.agents)");
+  expect(output).toContain("tw2stylex init --all");
 });
 
 describe("what it writes", () => {

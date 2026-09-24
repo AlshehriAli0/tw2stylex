@@ -28,12 +28,32 @@ Tailwind 4 utilities read the default theme through variables: `p-4` is
 `calc(var(--spacing) * 4)`, `text-sm` is `var(--text-sm)`. Those variables come from Tailwind's
 `theme.css`, so deleting `@import "tailwindcss"` deletes them too.
 
-`tw2stylex` inlines every default Tailwind ships that the project has not overridden: `p-4` becomes
-`padding: '1rem'`, `text-red-500` becomes its `oklch(…)` literal. Whatever is still a `var(--…)`
+`tw2stylex` inlines Tailwind defaults that the project has not overridden at runtime: `p-4`
+becomes `padding: '1rem'`, `text-red-500` becomes its `oklch(…)` literal. Whatever is still a `var(--…)`
 in the output is yours — a token from the project's `@theme`, an override of a Tailwind default,
 or a runtime variable behind an `@theme inline` alias. Before removing Tailwind, each of those
 must be defined somewhere else: keep the `:root` rule, or move it to `defineVars` with the `--`
 bridge below.
+
+## Optional exact token mapping
+
+Use `--tokens tokens.json` with `explain`, `plan`, or `apply` to reuse existing `defineConsts`
+exports. The JSON keys are the generated CSS values:
+
+```json
+{
+  "rgb(var(--primary))": {
+    "from": "./src/lib/theme/theme.stylex.ts",
+    "export": "colors",
+    "key": "primary"
+  }
+}
+```
+
+Paths are relative to the JSON file. The CLI reads the exported `defineConsts` literal and
+uses the token only when it exactly matches the checked declaration. A different value, such
+as `9999px` for Tailwind's `calc(infinity * 1px)`, is a `token-needs-verification` skip for manual
+review. With no mapping, the CLI keeps the literal CSS value.
 
 ## When StyleX should own tokens
 

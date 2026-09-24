@@ -31,6 +31,7 @@ COMMANDS  (nothing writes unless you say --write)
   tw2stylex plan <path>            Convert + check a folder. Writes a JSON report.
   tw2stylex skipped <report.json>  Re-read a report, filtered.
   tw2stylex apply <path> --write   WRITES CODE. Rewrites only what converted cleanly.
+  tw2stylex apply <path> --diff    Preview a unified diff without writing.
 
 A TYPICAL RUN
   tw2stylex plan src/components        # MISMATCHES must be 0; the skips are the work
@@ -41,6 +42,7 @@ A TYPICAL RUN
 OPTIONS
   --css <file>        Your Tailwind entry CSS. Found automatically if you leave it out.
   --config <file>     Your tailwind.config file, for projects that keep their theme there.
+  --tokens <file>     Optional JSON map from generated CSS values to exact defineConsts tokens.
   --json[=<fields>]   JSON output. Plain --json lists the field names you can ask for.
   --limit <n>         How many skips to print (default 20). Use 0 for just the summary.
   --reason <r>        Show one reason only.
@@ -49,6 +51,7 @@ OPTIONS
   --all               init only: write to every agent dir, not just the ones present.
   --stdin             explain only: one class string per line, answered in one run.
   --write             apply only: actually edit files. Without it, apply is a dry run.
+  --diff              apply only: print unified diffs for proposed edits.
   --allow-dirty       apply only: write even with uncommitted changes.
 
 Every skip says WHY it was skipped (the reason) and HOW HARD it is to fix:

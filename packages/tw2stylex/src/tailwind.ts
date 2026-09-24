@@ -2,9 +2,12 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
+import postcss from "postcss";
+
 import { cjsDefault, isRecord, requireExport } from "./cjs.ts";
 import { findConfig } from "./find-files.ts";
 import { loadV3 } from "./tailwind-v3.ts";
+import type { Tokens } from "./tokens.ts";
 
 type Theme = {
   get: (keys: string[]) => string | null;
@@ -22,15 +25,22 @@ export type DesignSystem = Compiled & {
 };
 
 const themeDefaultIn =
-  (theme: Theme) =>
+  (theme: Theme, runtimeVariables: Set<string>) =>
   (variable: string): string | undefined => {
+    if (runtimeVariables.has(variable)) return undefined;
     if (!theme.hasDefault(variable)) return undefined;
     const value = theme.get([variable]);
     if (value === null || value.includes("theme(")) return undefined;
     return value.replace(/\s+/g, " ");
   };
 
-export type LoadedSystem = { ds: DesignSystem; entry: string; base: string; version: string };
+export type LoadedSystem = {
+  ds: DesignSystem;
+  entry: string;
+  base: string;
+  version: string;
+  tokens?: Tokens;
+};
 
 export class MissingProjectDependencyError extends Error {
   constructor(id: string, from: string) {
@@ -208,6 +218,14 @@ const loadV4 = async (
   version: string,
 ): Promise<LoadedSystem> => {
   const base = path.dirname(entry);
+  const runtimeVariables = new Set<string>();
+  const trackRuntimeVariables = (css: string): void => {
+    postcss.parse(css).walkDecls(/^--/, decl => {
+      if (decl.parent?.type === "rule") runtimeVariables.add(decl.prop);
+    });
+  };
+  const entryCss = fs.readFileSync(entry, "utf8");
+  trackRuntimeVariables(entryCss);
   const twPath = req.resolve("tailwindcss");
   const twMod: unknown = await import(twPath);
   const tw = requireExport(twMod, "__unstable__loadDesignSystem", `tailwindcss at ${twPath}`);
@@ -220,10 +238,12 @@ const loadV4 = async (
     from: string,
   ): Promise<{ path: string; base: string; content: string }> => {
     const file = resolveCss(id, from);
+    const content = fs.readFileSync(file, "utf8");
+    trackRuntimeVariables(content);
     return await Promise.resolve({
       path: file,
       base: path.dirname(file),
-      content: fs.readFileSync(file, "utf8"),
+      content,
     });
   };
 
@@ -243,7 +263,11 @@ const loadV4 = async (
     return { path: file, base: path.dirname(file), module: cjsDefault(mod) };
   };
 
-  const v4 = await load(fs.readFileSync(entry, "utf8"), { base, loadStylesheet, loadModule });
-  const ds = { ...v4, slotDefaults: new Map(), themeDefault: themeDefaultIn(v4.theme) };
+  const v4 = await load(entryCss, { base, loadStylesheet, loadModule });
+  const ds = {
+    ...v4,
+    slotDefaults: new Map(),
+    themeDefault: themeDefaultIn(v4.theme, runtimeVariables),
+  };
   return { ds, entry, base, version };
 };

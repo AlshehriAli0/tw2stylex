@@ -292,8 +292,21 @@ describe("cva definitions are reported but never rewritten in place", () => {
     expect(planned.converted).toBe(0);
     expect(planned.skips.map(skip => skip.reason)).toContain("manual-rewrite");
     expect(planned.source).toContain("base:");
+    expect(planned.sourceStatus).toBe("fragment");
+    expect(planned.unresolvedClasses).toBeUndefined();
     expect(fs.readFileSync(file, "utf8")).toBe(code);
   });
+});
+
+test("partial cva candidates list unresolved classes and generic names need review", () => {
+  const file = write(
+    "fragment.tsx",
+    `import { cva } from 'class-variance-authority';\nconst v = cva("flex dark:text-white", { variants: { size: { sm: "p-1" } } });\nexport const A = () => <><div className="flex" /><div className="p-4" /></>;\n`,
+  );
+  const planned = processFile(sys, file);
+  expect(planned.sourceStatus).toBe("fragment");
+  expect(planned.unresolvedClasses).toContain("dark:text-white");
+  expect(planned.reviewNames).toEqual(expect.arrayContaining([expect.stringContaining("div2")]));
 });
 
 describe("plan and apply agree on what converted", () => {
@@ -309,6 +322,7 @@ describe("plan and apply agree on what converted", () => {
   test("apply never rewrites a usage plan reported as skipped", () => {
     const file = write("agree.tsx", source);
     const planned = processFile(sys, file);
+    expect(planned.sourceStatus).toBe("fragment");
     const names = new Set([...(planned.source ?? "").matchAll(/^\s{2}(\w+): \{/gm)].map(m => m[1]));
 
     applyFile(sys, file, true);

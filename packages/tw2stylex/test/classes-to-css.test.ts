@@ -280,6 +280,23 @@ describe("Tailwind's own theme variables are inlined, so the output survives rem
     expect(run("bg-primary").style?.backgroundColor).toBe("rgb(var(--primary))");
   });
 
+  test("an inline radius alias keeps a root variable with a scoped override", async () => {
+    const entry = path.join(import.meta.dir, "runtime-radius-fixture.css");
+    fs.writeFileSync(
+      entry,
+      `@import "tailwindcss";\n@theme inline { --radius-xl: calc(var(--radius) + 4px); }\n:root { --radius: 0.5rem; }\n.compact { --radius: 1rem; }\n`,
+    );
+    try {
+      const runtime = await loadDesignSystem(entry);
+      const result = convert(runtime.ds, "radius", ["rounded-xl"]);
+      expect(result.style?.borderRadius).toBe("calc(var(--radius) + 4px)");
+      expect(result.skips).toEqual([]);
+      expect(result.mismatches).toEqual([]);
+    } finally {
+      fs.rmSync(entry);
+    }
+  });
+
   describe("a Tailwind default the project overrides is the project's token", () => {
     const entry = path.join(import.meta.dir, "override-fixture.css");
     let overridden: LoadedSystem;

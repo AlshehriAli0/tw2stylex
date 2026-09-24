@@ -5,7 +5,16 @@ export type Args = {
   flags: Map<string, Flag>;
 };
 
-const BOOLEAN_FLAGS = new Set(["all", "allow-dirty", "help", "json", "stdin", "version", "write"]);
+const BOOLEAN_FLAGS = new Set([
+  "all",
+  "allow-dirty",
+  "diff",
+  "help",
+  "json",
+  "stdin",
+  "version",
+  "write",
+]);
 
 export const parseArgs = (argv: string[]): Args => {
   const positional: string[] = [];

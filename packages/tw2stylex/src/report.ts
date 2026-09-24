@@ -21,6 +21,9 @@ export type FileResult = {
   converted: number;
   skipped: number;
   source?: string;
+  sourceStatus?: "fragment";
+  unresolvedClasses?: string[];
+  reviewNames?: string[];
   skips: SkipLine[];
   mismatches: Mismatch[];
 };
@@ -30,6 +33,10 @@ export type Report = {
   tool: string;
   tailwind: string;
   entry: string;
+  version?: string;
+  target?: string;
+  inputs?: Record<string, string>;
+  components?: Array<{ name: string; source: string; callers: string[]; skipCount: number }>;
   summary: {
     files: number;
     usages: number;
@@ -137,10 +144,35 @@ export const renderReport = (
   const { files, usages, converted, skipped } = report.summary;
   const skips = report.files.flatMap(f => f.skips);
   const elapsed = elapsedMs === undefined ? "" : dim(` · ${took(elapsedMs)}`);
+  const components = [...(report.components ?? [])].sort((a, b) => b.skipCount - a.skipCount);
+  const componentLines: string[] = [];
+  if (components.length) {
+    componentLines.push("", `Components to inspect (${components.length}):`);
+    for (const c of components.slice(0, limit)) {
+      componentLines.push(`  ${c.name} · ${c.skipCount} skips · ${c.source}`);
+      for (const caller of c.callers.slice(0, 5)) componentLines.push(`    ${caller}`);
+      if (c.callers.length > 5) componentLines.push(`    +${c.callers.length - 5} more callers`);
+    }
+  }
+  const reviewLines: string[] = [];
+  for (const file of report.files) {
+    if (file.sourceStatus === "fragment" && file.source) {
+      const unresolved = file.unresolvedClasses?.length
+        ? `; unresolved base/variant classes: ${file.unresolvedClasses.join(" ")}`
+        : "";
+      reviewLines.push(
+        `Fragment only: ${file.file}; ${file.skipped} usages still skipped${unresolved}`,
+      );
+    }
+    if (file.reviewNames?.length)
+      reviewLines.push(`Review generated names in ${file.file}: ${file.reviewNames.join(", ")}`);
+  }
   return [
     `${bold(String(files))} files · ${bold(String(usages))} usages · ` +
       `${green(bold(String(converted)))} converted · ${countOf(skipped)} skipped${elapsed}`,
     ...mismatchSection(report, limit),
+    ...componentLines,
+    ...(reviewLines.length ? ["", ...reviewLines.slice(0, limit)] : []),
     ...skipSection(skips, skipped, limit),
     ...nextStep(skips, reportPath),
   ].join("\n");

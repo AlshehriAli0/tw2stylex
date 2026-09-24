@@ -343,3 +343,12 @@ Two moves, both of them: convert that one usage by hand from the Tailwind classe
 the class string that caused it. Working from the classes rather than from the broken output is
 the point — what tw2stylex produced is wrong at the source, so a patch that makes it compile ships
 the wrong styles and hides the bug from the next person.
+
+---
+
+## `token-needs-verification` — check-first
+
+An optional `--tokens` mapping points to a `defineConsts` value that differs from the checked
+Tailwind declaration, or cannot be read as a static literal. Keep the original class until the
+value and runtime behavior have been verified manually, or remove the mapping to emit the
+checked literal.

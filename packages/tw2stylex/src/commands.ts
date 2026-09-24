@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -11,14 +12,21 @@ import {
   positionalAt,
   type Args,
 } from "./args.ts";
-import { isRecord } from "./cjs.ts";
 import { bold, cyan, dim, FIX_COLOR, green } from "./color.ts";
 import { convert, warmUp } from "./convert.ts";
-import { printCreate, type Style } from "./css-to-stylex.ts";
+import type { Style } from "./css-to-stylex.ts";
 import { EXIT, fail, type Failure } from "./fail.ts";
 import { collectFiles, findConfig, findEntryCss } from "./find-files.ts";
-import { AGENT_HOMES, homesPresent, ignoreReports, installSkill, installedSkills } from "./init.ts";
+import {
+  AGENT_HOMES,
+  homesPresent,
+  ignoreReports,
+  installSkill,
+  installedSkills,
+  skillName,
+} from "./init.ts";
 import { plan } from "./plan.ts";
+import { openReport, reportWarnings } from "./read-report.ts";
 import { paintSkip, renderReport, toSkipLine, took, type Report, type SkipLine } from "./report.ts";
 import {
   checkEntryOrder,
@@ -27,6 +35,7 @@ import {
   enableCssLayers,
 } from "./stylex-config.ts";
 import { loadDesignSystem, type LoadedSystem } from "./tailwind.ts";
+import { loadTokens, mappedSource, tokenSkips } from "./tokens.ts";
 
 export type CommandResult = { exit: number } | Failure;
 
@@ -104,14 +113,23 @@ const homesToWrite = (args: Args, root: string): string[] => {
 
 export const initCommand = (args: Args, out: Output): CommandResult => {
   const root = process.cwd();
-  const installed = installSkill(root, homesToWrite(args, root));
+  const homes = homesToWrite(args, root);
+  const installed = installSkill(root, homes);
+  const omittedHomes = AGENT_HOMES.filter(h => !homes.includes(h.home));
   ignoreReports(root);
   const layers = enableCssLayers(root);
   const entry = checkEntryOrder(root);
-  if (out.json) emit({ ...installed, layers, entry });
+  if (out.json) emit({ ...installed, omittedHomes, layers, entry });
   else {
     console.log(`tw2stylex ${installed.version}: skill installed`);
-    for (const destination of installed.destinations) console.log(`  ${destination}`);
+    for (const home of AGENT_HOMES.filter(h => homes.includes(h.home)))
+      console.log(
+        `  ${home.agents}: ${path.join(root, home.home, "skills", skillName(), "SKILL.md")}`,
+      );
+    if (omittedHomes.length)
+      console.log(
+        `  Omitted ${omittedHomes.map(h => `${h.agents} (${h.home})`).join(", ")}; run tw2stylex init --all to install into every supported agent home.`,
+      );
     for (const backup of installed.backups) console.log(`  Previous skill saved to ${backup}`);
     console.log(`  .gitignore ignores ${dim(".tw2stylex/")}`);
     console.log(`  ${describeLayers(layers)}`);
@@ -139,12 +157,22 @@ type Explained = {
 
 const explain = (sys: LoadedSystem, input: string): Explained => {
   const { style, rules, skips } = convert(sys.ds, "styles", input.split(/\s+/));
+  const problems = style ? tokenSkips(style, sys.tokens) : [];
+  const mapped =
+    style && problems.length === 0
+      ? mappedSource({
+          styles: { styles: style },
+          tokens: sys.tokens,
+          file: path.join(process.cwd(), "tw2stylex-explain.tsx"),
+          code: "",
+        })
+      : undefined;
   return {
     input,
-    style,
+    style: problems.length ? undefined : style,
     rules,
-    source: style ? printCreate({ styles: style }) : undefined,
-    skipped: skips.map(s => toSkipLine("<argv>", 0, 0, s)),
+    source: mapped ? [...mapped.imports, mapped.source].join("\n") : undefined,
+    skipped: [...skips, ...problems].map(s => toSkipLine("<argv>", 0, 0, s)),
   };
 };
 
@@ -188,6 +216,8 @@ export const explainCommand = async (args: Args, out: Output): Promise<CommandRe
   if (typeof css !== "string") return css;
 
   const sys = await loadDesignSystem(css);
+  const tokensPath = flagString(args, "tokens");
+  if (tokensPath) sys.tokens = loadTokens(tokensPath);
   const explained = inputs.map(input => explain(sys, input));
   const fromStdin = flagWasPassed(args, "stdin");
 
@@ -207,8 +237,12 @@ export const explainCommand = async (args: Args, out: Output): Promise<CommandRe
 const summarise = (report: Report, fields: string[] | undefined): unknown => ({
   ok: report.ok,
   tool: report.tool,
+  version: report.version,
   tailwind: report.tailwind,
   entry: report.entry,
+  target: report.target,
+  inputs: report.inputs,
+  components: report.components,
   summary: report.summary,
   files: report.files.map(f => ({
     file: f.file,
@@ -216,6 +250,9 @@ const summarise = (report: Report, fields: string[] | undefined): unknown => ({
     usages: f.usages,
     converted: f.converted,
     skipped: f.skipped,
+    sourceStatus: f.sourceStatus,
+    unresolvedClasses: f.unresolvedClasses,
+    reviewNames: f.reviewNames,
     skips: f.skips.map(x => project(x, fields)),
   })),
 });
@@ -234,10 +271,14 @@ export const planCommand = async (args: Args, out: Output): Promise<CommandResul
 
   const startedAt = Date.now();
   const files = collectFiles(target);
-  const report = await plan(css, files);
+  const report = await plan(css, files, target, flagString(args, "tokens"));
   const elapsedMs = Date.now() - startedAt;
 
-  const hash = crypto.createHash("sha1").update(files.join("\n")).digest("hex").slice(0, 6);
+  const hash = crypto
+    .createHash("sha1")
+    .update(JSON.stringify(report.inputs))
+    .digest("hex")
+    .slice(0, 8);
   const reportPath = flagString(args, "out") ?? path.join(".tw2stylex", `plan-${hash}.json`);
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   // The report holds every class string; Tailwind 4 scans any file git does not ignore.
@@ -265,20 +306,31 @@ const sumOf = (results: ApplyFileResult[], key: "rewritten" | "skipped"): number
   results.reduce((total, r) => total + r[key], 0);
 
 const applyJson = (
-  touched: ApplyFileResult[],
-  write: boolean,
-  rewritten: number,
-  skipped: number,
+  p: Pick<ApplyPrint, "touched" | "write" | "diff" | "rewritten" | "skipped">,
 ): unknown => ({
   ok: true,
-  write,
-  files: touched.map(r => ({ ...r, diff: undefined })),
-  summary: { files: touched.length, rewritten, skipped },
+  write: p.write,
+  files: p.touched.map(r => ({
+    ...r,
+    diff: p.diff && r.diff ? unifiedDiff(r.file, r.diff) : undefined,
+  })),
+  summary: { files: p.touched.length, rewritten: p.rewritten, skipped: p.skipped },
 });
+
+const unifiedDiff = (file: string, edited: string): string => {
+  const run = spawnSync("diff", ["-u", "--label", `a/${file}`, "--label", `b/${file}`, file, "-"], {
+    input: edited,
+    encoding: "utf8",
+    maxBuffer: 50 * 1024 * 1024,
+  });
+  if (run.status !== 1 || run.error) throw run.error ?? new Error(run.stderr || "diff failed");
+  return run.stdout;
+};
 
 type ApplyPrint = {
   touched: ApplyFileResult[];
   write: boolean;
+  diff: boolean;
   rewritten: number;
   skipped: number;
   target: string;
@@ -287,7 +339,7 @@ type ApplyPrint = {
 };
 
 const printApply = (p: ApplyPrint): void => {
-  const { touched, write, rewritten, skipped, target, limit, elapsedMs } = p;
+  const { touched, write, diff, rewritten, skipped, target, limit, elapsedMs } = p;
   const mode = write ? "" : dim("  (DRY RUN - pass --write to edit)");
   console.log(
     `${bold(String(touched.length))} files · ${green(bold(String(rewritten)))} usages rewritten · ` +
@@ -297,6 +349,7 @@ const printApply = (p: ApplyPrint): void => {
     console.log(`  ${dim(r.file)}: ${r.rewritten} rewritten, ${r.skipped} skipped`);
   if (touched.length > limit)
     console.log(`\n${dim(`Showing ${limit} of ${touched.length} files.`)}`);
+  if (diff) for (const r of touched) if (r.diff) console.log(unifiedDiff(r.file, r.diff));
   if (!write && touched.length > 0)
     console.log(`\n${dim("Next:")} ${cyan(`tw2stylex apply ${target} --write`)}`);
 };
@@ -306,6 +359,14 @@ export const applyCommand = async (args: Args, out: Output): Promise<CommandResu
   if (typeof target !== "string") return target;
 
   const write = flagWithoutValue(args, "write");
+  const diff = flagWithoutValue(args, "diff");
+  if (write && diff)
+    return fail(
+      "E_CONFLICTING_FLAGS",
+      EXIT.BAD_ARGUMENTS,
+      "--diff previews changes; it cannot be combined with --write.",
+      "Run apply --diff first, then apply --write.",
+    );
   const blocked = write && !flagWithoutValue(args, "allow-dirty") ? dirtyGuard(target) : undefined;
   if (blocked) return blocked;
 
@@ -314,6 +375,8 @@ export const applyCommand = async (args: Args, out: Output): Promise<CommandResu
 
   const startedAt = Date.now();
   const sys = await loadDesignSystem(css);
+  const tokensPath = flagString(args, "tokens");
+  if (tokensPath) sys.tokens = loadTokens(tokensPath);
   const scanned = collectFiles(target).map(readAndScan);
   warmUp(
     sys.ds,
@@ -324,11 +387,12 @@ export const applyCommand = async (args: Args, out: Output): Promise<CommandResu
   const rewritten = sumOf(touched, "rewritten");
   const skipped = sumOf(results, "skipped");
 
-  if (out.json) emit(applyJson(touched, write, rewritten, skipped));
+  if (out.json) emit(applyJson({ touched, write, diff, rewritten, skipped }));
   else
     printApply({
       touched,
       write,
+      diff,
       rewritten,
       skipped,
       target,
@@ -339,13 +403,6 @@ export const applyCommand = async (args: Args, out: Output): Promise<CommandResu
   return { exit: skipped > 0 ? EXIT.SOME_SKIPPED : EXIT.NOTHING_SKIPPED };
 };
 
-const isReport = (v: unknown): v is Report => isRecord(v) && Array.isArray(v.files);
-
-const readReport = (file: string): Report | undefined => {
-  const parsed: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
-  return isReport(parsed) ? parsed : undefined;
-};
-
 const filterSkips = (report: Report, args: Args): SkipLine[] => {
   const reason = flagString(args, "reason");
   const fix = flagString(args, "fix");
@@ -353,28 +410,6 @@ const filterSkips = (report: Report, args: Args): SkipLine[] => {
     .flatMap(f => f.skips)
     .filter(f => reason === undefined || f.reason === reason)
     .filter(f => fix === undefined || f.fix === fix);
-};
-
-const openReport = (args: Args): Report | Failure => {
-  const file = positionalAt(args, 1);
-  if (file === undefined || !fs.existsSync(file))
-    return fail(
-      "E_NO_REPORT",
-      EXIT.BAD_ARGUMENTS,
-      `Report not found: ${file ?? "(none given)"}`,
-      "Run tw2stylex plan <path> first.",
-    );
-
-  const report = readReport(file);
-  if (!report)
-    return fail(
-      "E_BAD_REPORT",
-      EXIT.BAD_ARGUMENTS,
-      `Not a tw2stylex report: ${file}`,
-      "Regenerate it with tw2stylex plan.",
-    );
-
-  return report;
 };
 
 const printSkips = (skips: SkipLine[], shown: SkipLine[]): void => {
@@ -391,6 +426,8 @@ export const skippedCommand = (args: Args, out: Output): CommandResult => {
 
   const report = openReport(args);
   if (isError(report)) return report;
+
+  for (const warning of reportWarnings(report)) console.error(`warning: ${warning}`);
 
   const skips = filterSkips(report, args);
   const shown = skips.slice(0, out.limit);

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { applyFile } from "../src/apply.ts";
 import { parseArgs, type Args } from "../src/args.ts";
 import { isRecord } from "../src/cjs.ts";
 import {
@@ -17,6 +18,7 @@ import {
   type CommandResult,
 } from "../src/commands.ts";
 import { EXIT } from "../src/fail.ts";
+import { loadDesignSystem } from "../src/tailwind.ts";
 
 /**
  * The command layer: what an agent actually sees. Exit codes, error codes and the shape of
@@ -144,6 +146,67 @@ describe("plan writes a report and says where it went", () => {
     expect(r.out).toContain(`Full report: ${out}`);
   });
 
+  test("a shared Button is grouped by its resolved import and callers", async () => {
+    const button = write("button.tsx", `export const Button = () => <button />;\n`);
+    const route = write(
+      "route.tsx",
+      `import { Button } from './button';\nexport const Route = () => <><Button className="flex" /><Button className="p-4" /></>;\n`,
+    );
+    const out = path.join(dir, "components.json");
+    const r = await run(`plan ${route} --out ${out}`);
+    const body = record(json(fs.readFileSync(out, "utf8")));
+    const group = record(Array.isArray(body.components) ? body.components[0] : undefined);
+    expect(group).toMatchObject({ name: "Button", source: button, skipCount: 2 });
+    expect(group.callers).toEqual([`${route}:2:38`, `${route}:2:65`]);
+    expect(r.out).toContain("Button · 2 skips");
+    expect(record(Array.isArray(body.files) ? body.files[0] : undefined).skips).toHaveLength(2);
+  });
+
+  test("tsconfig path imports resolve and missing imports remain explicit", async () => {
+    write("alias/tsconfig.json", `{"compilerOptions":{"paths":{"@/*":["./src/*"]}}}`);
+    const button = write("alias/src/button.tsx", `export const Button = () => <button />;\n`);
+    const route = write(
+      "alias/src/route.tsx",
+      `import { Button } from '@/button';\nimport { Missing } from '@/missing';\nexport const Route = () => <><Button className="flex" /><Missing className="p-4" /></>;\n`,
+    );
+    const out = path.join(dir, "alias-report.json");
+    await run(`plan ${route} --out ${out}`);
+    const body = record(json(fs.readFileSync(out, "utf8")));
+    const groups = Array.isArray(body.components) ? body.components.map(record) : [];
+    expect(groups.find(group => group.name === "Button")?.source).toBe(button);
+    expect(groups.find(group => group.name === "Missing")?.source).toBe("unresolved (@/missing)");
+  });
+
+  test("reports carry the tool, target and content fingerprints, then warn when stale", async () => {
+    const file = write("fingerprint.tsx", `export const A = () => <div className="flex" />;\n`);
+    const out = path.join(dir, "fingerprint.json");
+    await run(`plan ${file} --out ${out}`);
+    const body = record(json(fs.readFileSync(out, "utf8")));
+    expect(body.version).toBe("0.6.1");
+    expect(body.target).toBe(file);
+    expect(record(body.inputs)[file]).toMatch(/^[a-f0-9]{40}$/);
+    expect(record(body.inputs)[css]).toMatch(/^[a-f0-9]{40}$/);
+    fs.appendFileSync(file, "// changed\n");
+    const stale = await run(`skipped ${out}`);
+    expect(stale.err).toContain(`Input changed: ${file}`);
+    fs.writeFileSync(out, JSON.stringify({ ...body, version: "0.0.0" }));
+    const oldVersion = await run(`skipped ${out}`);
+    expect(oldVersion.err).toContain("Tool changed: 0.0.0");
+  });
+
+  test("a new source file makes a directory report stale", async () => {
+    const target = path.join(dir, "new-input-zone");
+    write("new-input-zone/first.tsx", `export const A = () => <div className="flex" />;\n`);
+    const out = path.join(dir, "new-input-report.json");
+    await run(`plan ${target} --out ${out}`);
+    const added = write(
+      "new-input-zone/second.tsx",
+      `export const B = () => <div className="p-4" />;\n`,
+    );
+    const stale = await run(`skipped ${out}`);
+    expect(stale.err).toContain(`New input: ${added}`);
+  });
+
   test("skips mean exit 1, and the summary line leads", async () => {
     const r = await run(`plan ${dir}/src --out ${path.join(dir, "r2.json")}`);
     expect(r.out.split("\n")[0]).toContain("usages");
@@ -159,11 +222,14 @@ describe("plan writes a report and says where it went", () => {
   test("without --out the report still lands somewhere predictable", async () => {
     const cwd = process.cwd();
     const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "tw2stylex-out-"));
+    const file = write("revision.tsx", `export const A = () => <div className="flex" />;\n`);
     try {
       process.chdir(scratch);
-      await run(`plan ${dir}/src/clean.tsx`);
+      await run(`plan ${file}`);
+      fs.writeFileSync(file, `export const A = () => <div className="p-4" />;\n`);
+      await run(`plan ${file}`);
       const written = fs.readdirSync(path.join(scratch, ".tw2stylex"));
-      expect(written.some(f => f.startsWith("plan-") && f.endsWith(".json"))).toBe(true);
+      expect(written.filter(f => f.startsWith("plan-") && f.endsWith(".json"))).toHaveLength(2);
     } finally {
       process.chdir(cwd);
       fs.rmSync(scratch, { recursive: true, force: true });
@@ -275,6 +341,25 @@ describe("apply is a dry run until told otherwise", () => {
     expect(record(body.summary).rewritten).toBe(1);
     const first = record(Array.isArray(body.files) ? body.files[0] : undefined);
     expect(first.diff).toBeUndefined();
+  });
+
+  test("--diff previews the exact import, JSX and StyleX edit that --write makes", async () => {
+    const file = write("src/preview.tsx", `export const A = () => <div className="flex" />;\n`);
+    const before = fs.readFileSync(file, "utf8");
+    const preview = await run(`apply ${file} --diff`);
+    expect(preview.out).toContain("--- a/");
+    expect(preview.out).toContain("+++ b/");
+    expect(preview.out).toContain("+import * as stylex");
+    expect(preview.out).toContain("+export const A = () => <div {...stylex.props(styles.div)} />;");
+    expect(preview.out).toContain("+const styles = stylex.create");
+    expect(fs.readFileSync(file, "utf8")).toBe(before);
+    const proposed = applyFile(await loadDesignSystem(css), file, false).diff;
+    const jsonRun = await run(`apply ${file} --diff --json`);
+    const jsonPreview = record(json(jsonRun.out));
+    const row = record(Array.isArray(jsonPreview.files) ? jsonPreview.files[0] : undefined);
+    expect(String(row.diff)).toContain("+const styles = stylex.create");
+    await run(`apply ${file} --write --allow-dirty`);
+    expect(fs.readFileSync(file, "utf8")).toBe(proposed);
   });
 
   test("a missing path fails the same way plan does", async () => {
