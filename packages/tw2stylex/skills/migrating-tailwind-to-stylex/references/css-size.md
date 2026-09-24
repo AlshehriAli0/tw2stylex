@@ -26,7 +26,9 @@ bytes raw, 2,682 → 2,178 gzipped).
 - The production build. `dev`, `debug`, `runtimeInjection` all `false` — [setup.md](setup.md)
   "Production config".
 - One StyleX CSS file — [setup.md](setup.md) "CSS entrypoint".
-- Gzipped, after the bundler's minifier.
+- Gzipped from the final production CSS asset. For Vite, enable
+  `lightningcssOptions.minify` as shown in [setup.md](setup.md); the unplugin adds
+  StyleX CSS after Vite's CSS minifier.
 
 ## Causes, largest first
 

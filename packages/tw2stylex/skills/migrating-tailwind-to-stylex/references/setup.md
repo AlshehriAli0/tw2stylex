@@ -32,11 +32,26 @@ resolve from that project for the compiler to reproduce its design system.
 ```ts
 // vite.config.ts
 import stylex from '@stylexjs/unplugin/vite';
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
 
-export default defineConfig({
-  plugins: [stylex({ useCSSLayers: true }), react()],   // see "Two settings" below
-});
+export default defineConfig(({ command }) => ({
+  plugins: [
+    stylex({
+      useCSSLayers: true, // see "Two settings" below
+      lightningcssOptions: { minify: command === 'build' },
+    }),
+    react(),
+  ],
+}));
 ```
+
+The unplugin appends StyleX rules after Vite's CSS minifier runs, so
+`build.cssMinify` alone does not minify them. `lightningcssOptions.minify` handles
+the StyleX rules; keep it off during development for readable CSS. The plugin
+already reads the project's Browserslist targets for prefixes and CSS lowering.
+Set `lightningcssOptions.targets` only when StyleX needs different browser
+targets, and check the resulting CSS and supported browsers if you do.
 
 Each bundler has its own adapter — `@stylexjs/unplugin/vite`, `/webpack`, `/rspack`,
 `/esbuild`, `/rollup` — with the same options; the package root loads all of them at once.
@@ -175,5 +190,6 @@ build with no warning:
 | `runtimeInjection` | `false` | the style-injection runtime ships in the JS bundle |
 | `styleResolution` | `'property-specificity'` | `legacy-expand-shorthands` expands every shorthand, +20% CSS; `application-order` bloats compiled JS |
 
-`treeshakeCompensation: true` is the fix when the bundler drops a `.stylex.ts` import a style
-depends on. Narrow `include`/`exclude` keeps the build fast.
+Vite enables `treeshakeCompensation` by default so imported `.stylex.ts` rules survive
+tree shaking. If a dependency ships uncompiled StyleX and the plugin does not discover it,
+add its package name to `externalPackages`. Narrow `include`/`exclude` keeps the build fast.
