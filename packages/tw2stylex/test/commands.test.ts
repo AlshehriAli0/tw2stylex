@@ -182,7 +182,8 @@ describe("plan writes a report and says where it went", () => {
     const out = path.join(dir, "fingerprint.json");
     await run(`plan ${file} --out ${out}`);
     const body = record(json(fs.readFileSync(out, "utf8")));
-    expect(body.version).toBe("0.6.1");
+    const packageFile = path.join(import.meta.dir, "../package.json");
+    expect(body.version).toBe(record(json(fs.readFileSync(packageFile, "utf8"))).version);
     expect(body.target).toBe(file);
     expect(record(body.inputs)[file]).toMatch(/^[a-f0-9]{40}$/);
     expect(record(body.inputs)[css]).toMatch(/^[a-f0-9]{40}$/);
